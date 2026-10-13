@@ -86,6 +86,9 @@ type APIPath struct {
 	InboundBytes         uint64              `json:"inboundBytes"`
 	OutboundBytes        uint64              `json:"outboundBytes"`
 	InboundFramesInError uint64              `json:"inboundFramesInError"`
+	// longest recent interval between key frames of the first video track, in
+	// seconds; null when unknown.
+	KeyFrameInterval *float64 `json:"keyFrameInterval"`
 
 	// deprecated
 	BytesReceived uint64 `json:"bytesReceived" deprecated:"true"`

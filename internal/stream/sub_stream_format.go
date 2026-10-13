@@ -147,6 +147,10 @@ func (ssf *subStreamFormat) writeUnitInner(u *unit.Unit) error {
 
 		u.Payload = ssf.streamFormat.unitRemuxer(ssf.streamFormat.outFormat, u.Payload)
 
+		if ssf.streamFormat.keyFrames != nil && !u.NilPayload() {
+			ssf.streamFormat.keyFrames.process(u.Payload)
+		}
+
 		if ssf.streamFormat.rtpEncoder != nil && !u.NilPayload() {
 			var err error
 			u.RTPPackets, err = ssf.streamFormat.rtpEncoder.encode(u.Payload)

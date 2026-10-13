@@ -930,6 +930,11 @@ components:
         inboundFramesInError:
           type: integer
           format: uint64
+        keyFrameInterval:
+          type: number
+          format: double
+          description: longest recent interval between key frames of the first video track, in seconds; null when unknown.
+          nullable: true
         name:
           type: string
         online:

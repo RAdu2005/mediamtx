@@ -344,6 +344,22 @@ func (s *Stream) RequestKeyFrame() bool {
 	return true
 }
 
+// KeyFrameInterval returns the longest of the recent intervals between key
+// frames of the first video track, or zero when it is not known yet.
+func (s *Stream) KeyFrameInterval() time.Duration {
+	for _, media := range s.OrigDesc.Medias {
+		if media.Type != description.MediaTypeVideo {
+			continue
+		}
+		for _, forma := range media.Formats {
+			if t := s.medias[media].formats[forma].keyFrames; t != nil {
+				return t.interval()
+			}
+		}
+	}
+	return 0
+}
+
 // Initialize initializes a Stream.
 func (s *Stream) Initialize() error {
 	if s.AlwaysAvailable {

@@ -772,6 +772,17 @@ func (pa *path) doAPIPathsGet(req pathAPIPathsGetReq) {
 				}
 				return pa.stream.InboundFramesInError()
 			}(),
+			KeyFrameInterval: func() *float64 {
+				if !pa.isAvailable() {
+					return nil
+				}
+				d := pa.stream.KeyFrameInterval()
+				if d == 0 {
+					return nil
+				}
+				v := d.Seconds()
+				return &v
+			}(),
 			BytesReceived: func() uint64 {
 				if !pa.isAvailable() {
 					return 0

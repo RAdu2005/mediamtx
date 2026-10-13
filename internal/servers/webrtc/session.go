@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bluenviron/gortsplib/v5/pkg/description"
@@ -587,10 +588,17 @@ func (s *session) runRead(req *initialRequestReq) (int, error) {
 		return http.StatusBadRequest, err
 	}
 
+	var warnedKeyFrame atomic.Bool
 	pc.SetKeyFrameRequester(func(retry bool) {
 		res.Stream.RequestKeyFrame()
 		if retry {
-			s.Log(logger.Warn, "no key frame received yet, asking the source again")
+			// warn once: a source that ignores key frame requests would
+			// otherwise log this every few seconds until its next key frame.
+			if warnedKeyFrame.CompareAndSwap(false, true) {
+				s.Log(logger.Warn, "no key frame received yet, asking the source again")
+			} else {
+				s.Log(logger.Debug, "no key frame received yet, asking the source again")
+			}
 		}
 	})
 	r.OnDiscard = pc.RequireKeyFrame

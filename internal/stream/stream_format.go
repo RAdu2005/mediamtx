@@ -58,6 +58,7 @@ type streamFormat struct {
 	rtpEncoder    rtpEncoder
 	rtpTimeOffset uint32
 	ntpEstimator  *ntpestimator.Estimator
+	keyFrames     *keyFrameTracker
 	onDatas       map[*Reader]OnDataFunc
 }
 
@@ -78,6 +79,8 @@ func (sf *streamFormat) initialize() error {
 			ClockRate: sf.outFormat.ClockRate(),
 		}
 	}
+
+	sf.keyFrames = newKeyFrameTracker(sf.outFormat)
 
 	sf.onDatas = make(map[*Reader]OnDataFunc)
 

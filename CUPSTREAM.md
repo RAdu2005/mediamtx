@@ -32,7 +32,8 @@ Numbers refer to section 3.2 of the CupStream project overview.
 | 1–9. Key frames for new, resumed and lagging readers; PLI/FIR forwarding; `webrtcKeyFrameRequestPeriod`; pause/resume API with per-track selection; `webrtcAllowPausePatch`; non-blocking pause; `webrtcPausedTimeout`; paused state in the API; `preview=false`; lock-free per-unit check; key frame retry | `webrtc: complete WHEP pausing and key frame handling` |
 | 13. `GET /v3/events` (server-sent events) | `api: add an event stream` |
 | 14. Readers' loss, jitter, RTT, NACKs and PLIs in the API and metrics | `webrtc: report readers' packet loss, jitter and round-trip time` |
+| Measured key frame interval of each path; the key frame retry warning is logged once per session | `stream: measure the key frame interval` |
 
 New settings, with their defaults: `udpWriteBufferSize: 0` (OS default), `webrtcKeyFrameRequestPeriod: 2s`, `webrtcAllowPausePatch: true`, `webrtcPausedTimeout: 2m`.
 
-New API: `POST /v3/webrtc/sessions/pause/{id}`, `POST /v3/webrtc/sessions/resume/{id}` (optional body `{"video": bool, "audio": bool}`), `GET /v3/events`. Sessions gain `paused`, `pausedSince`, `videoPaused`, `audioPaused`, `outboundRTPPacketsLost`, `outboundRTPPacketsLossRatio`, `outboundRTPPacketsJitter` (s), `outboundRoundTripTime` (s), `outboundNACKs` and `outboundPLIs`.
+New API: `POST /v3/webrtc/sessions/pause/{id}`, `POST /v3/webrtc/sessions/resume/{id}` (optional body `{"video": bool, "audio": bool}`), `GET /v3/events`. Sessions gain `paused`, `pausedSince`, `videoPaused`, `audioPaused`, `outboundRTPPacketsLost`, `outboundRTPPacketsLossRatio`, `outboundRTPPacketsJitter` (s), `outboundRoundTripTime` (s), `outboundNACKs` and `outboundPLIs`. Paths gain `keyFrameInterval` (s): the longest of the last four intervals between key frames of the first video track, which is how long a new reader waits when the publisher ignores key frame requests (OBS and FFmpeg do).
