@@ -186,9 +186,13 @@ type PeerConnection struct {
 	STUNGatherTimeout            time.Duration
 	SupportsIPv6                 bool
 	Publish                      bool
-	OutboundTracks               []*OutboundTrack
-	OutboundDataChannels         []*OutboundDataChannel
-	Log                          logger.Writer
+	// KeyFrameRequestPeriod is how often inbound video tracks ask the
+	// publisher for a key frame. Zero means the default (2 seconds), a
+	// negative value disables the periodic requests.
+	KeyFrameRequestPeriod time.Duration
+	OutboundTracks        []*OutboundTrack
+	OutboundDataChannels  []*OutboundDataChannel
+	Log                   logger.Writer
 
 	wr               *webrtc.PeerConnection
 	ctx              context.Context
@@ -275,6 +279,7 @@ func (co *PeerConnection) Start() error {
 					MimeType:  webrtc.MimeTypePCMU,
 					ClockRate: 8000,
 				},
+				placeholder: true,
 			})
 		}
 
@@ -863,6 +868,8 @@ outer:
 				ridIndex:  getRIDIndex(mid, rid),
 				writeRTCP: co.wr.WriteRTCP,
 				log:       co.Log,
+
+				keyFrameRequestPeriod: co.KeyFrameRequestPeriod,
 			}
 			track.initialize()
 			tracks = append(tracks, track)
@@ -1007,21 +1014,66 @@ func (co *PeerConnection) StartReading() {
 	}
 }
 
-// SetPaused stops or resumes sending media on all outbound tracks.
-// The connection stays up while paused. When resumed, video tracks
-// wait for the next key frame.
-func (co *PeerConnection) SetPaused(paused bool) {
+// SetPaused stops or resumes sending media on the outbound tracks of the
+// given kinds. The connection stays up while paused. When resumed, video
+// tracks wait for the next key frame, which is requested from the source.
+func (co *PeerConnection) SetPaused(video bool, audio bool, paused bool) {
 	for _, track := range co.OutboundTracks {
-		track.setPaused(paused)
+		if (track.isVideo() && video) || (!track.isVideo() && audio) {
+			track.setPaused(paused)
+		}
 	}
 }
 
-// StartPaused pauses all outbound tracks once each has sent its first key
-// frame, so that the reader can display a frame and detect every track.
-// SetPaused overrides it.
-func (co *PeerConnection) StartPaused() {
+// StartPaused pauses all outbound tracks from the start. With preview, each
+// track first sends one key frame (video) or unit (audio), so that the
+// reader can display a frame and detect every track. SetPaused overrides it.
+// It must be called before Start.
+func (co *PeerConnection) StartPaused(preview bool) {
 	for _, track := range co.OutboundTracks {
-		track.pauseAfterFirstUnit()
+		track.startPaused(preview)
+	}
+}
+
+// PausedTracks reports whether the outbound video and audio tracks are
+// paused. A kind without tracks counts as paused; the silent audio track
+// added for streams without audio is ignored.
+func (co *PeerConnection) PausedTracks() (video bool, audio bool) {
+	video, audio = true, true
+	for _, track := range co.OutboundTracks {
+		if track.placeholder {
+			continue
+		}
+		if track.isVideo() {
+			video = video && track.isPaused()
+		} else {
+			audio = audio && track.isPaused()
+		}
+	}
+	return video, audio
+}
+
+// RequireKeyFrame makes outbound video tracks wait for the next key frame,
+// for instance after frames were discarded because the reader is too slow.
+func (co *PeerConnection) RequireKeyFrame() {
+	for _, track := range co.OutboundTracks {
+		track.requireKeyFrame()
+	}
+}
+
+// SetKeyFrameRequester sets how outbound tracks ask the source for a key
+// frame. It must be called before Start.
+func (co *PeerConnection) SetKeyFrameRequester(cb func(retry bool)) {
+	for _, track := range co.OutboundTracks {
+		track.RequestKeyFrame = cb
+	}
+}
+
+// RequestKeyFrame asks the remote publisher for a key frame on every inbound
+// video track.
+func (co *PeerConnection) RequestKeyFrame() {
+	for _, track := range co.InboundTracks() {
+		track.requestKeyFrame() //nolint:errcheck
 	}
 }
 

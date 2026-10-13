@@ -303,6 +303,45 @@ type Stream struct {
 	lastSystemTime    time.Time
 
 	hasReaders chan struct{}
+
+	keyFrameRequester   atomic.Pointer[keyFrameRequester]
+	lastKeyFrameRequest atomic.Int64
+}
+
+// keyFrameRequestMinPeriod limits key frame requests to the publisher, so
+// that a burst of readers joining or resuming shares one key frame.
+const keyFrameRequestMinPeriod = 300 * time.Millisecond
+
+type keyFrameRequester struct {
+	request func()
+}
+
+// SetKeyFrameRequester sets how the publisher is asked for a key frame. It
+// returns a function that removes it again, unless another publisher
+// replaced it in the meantime.
+func (s *Stream) SetKeyFrameRequester(request func()) func() {
+	r := &keyFrameRequester{request: request}
+	s.keyFrameRequester.Store(r)
+	return func() { s.keyFrameRequester.CompareAndSwap(r, nil) }
+}
+
+// RequestKeyFrame asks the publisher for a key frame, at most once every
+// 300 ms. It reports whether a request was sent. Publishers that cannot be
+// asked (RTMP, SRT, files) keep their own key frame interval.
+func (s *Stream) RequestKeyFrame() bool {
+	r := s.keyFrameRequester.Load()
+	if r == nil {
+		return false
+	}
+
+	now := time.Now().UnixNano()
+	last := s.lastKeyFrameRequest.Load()
+	if now-last < int64(keyFrameRequestMinPeriod) || !s.lastKeyFrameRequest.CompareAndSwap(last, now) {
+		return false
+	}
+
+	r.request()
+	return true
 }
 
 // Initialize initializes a Stream.

@@ -20,6 +20,11 @@ type Reader struct {
 	SkipOutboundBytes bool
 	Parent            logger.Writer
 
+	// OnDiscard, when set, is called every time a unit is discarded because
+	// the reader is too slow. It runs on the publisher's goroutine and must
+	// not block.
+	OnDiscard func()
+
 	onDatas                 map[*description.Media]map[format.Format]OnDataFunc
 	queueSize               int
 	buffer                  *ringbuffer.RingBuffer
@@ -128,5 +133,8 @@ func (r *Reader) push(cb func() error) {
 	ok := r.buffer.Push(cb)
 	if !ok {
 		r.outboundFramesDiscarded.Increase()
+		if r.OnDiscard != nil {
+			r.OnDiscard()
+		}
 	}
 }

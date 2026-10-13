@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bluenviron/gortsplib/v5/pkg/description"
 	"github.com/bluenviron/gortsplib/v5/pkg/format"
@@ -899,4 +900,83 @@ func TestStreamAlwaysAvailableConcurrentReaders(t *testing.T) {
 
 	close(done)
 	readersWG.Wait()
+}
+
+func TestStreamRequestKeyFrame(t *testing.T) {
+	strm := &Stream{
+		OrigDesc: &description.Session{Medias: []*description.Media{{
+			Type:    description.MediaTypeVideo,
+			Formats: []format.Format{&format.H264{PayloadTyp: 96, PacketizationMode: 1}},
+		}}},
+		WriteQueueSize:    512,
+		RTPMaxPayloadSize: 1450,
+		Parent:            &nilLogger{},
+	}
+	err := strm.Initialize()
+	require.NoError(t, err)
+	defer strm.Close()
+
+	require.False(t, strm.RequestKeyFrame(), "no publisher that can be asked")
+
+	var n atomic.Int64
+	remove := strm.SetKeyFrameRequester(func() { n.Add(1) })
+
+	require.True(t, strm.RequestKeyFrame())
+	for range 10 {
+		require.False(t, strm.RequestKeyFrame(), "requests within 300 ms share one key frame")
+	}
+	require.Equal(t, int64(1), n.Load())
+
+	time.Sleep(350 * time.Millisecond)
+	require.True(t, strm.RequestKeyFrame())
+	require.Equal(t, int64(2), n.Load())
+
+	// a newer publisher's requester survives the old publisher's removal.
+	var m atomic.Int64
+	strm.SetKeyFrameRequester(func() { m.Add(1) })
+	remove()
+	time.Sleep(350 * time.Millisecond)
+	require.True(t, strm.RequestKeyFrame())
+	require.Equal(t, int64(1), m.Load())
+}
+
+func TestReaderOnDiscard(t *testing.T) {
+	desc := &description.Session{Medias: []*description.Media{{
+		Type:    description.MediaTypeVideo,
+		Formats: []format.Format{&format.H264{PayloadTyp: 96, PacketizationMode: 1}},
+	}}}
+	strm := &Stream{
+		OrigDesc:          desc,
+		WriteQueueSize:    16,
+		RTPMaxPayloadSize: 1450,
+		Parent:            &nilLogger{},
+	}
+	err := strm.Initialize()
+	require.NoError(t, err)
+	defer strm.Close()
+
+	subStream := &SubStream{Stream: strm}
+	err = subStream.Initialize()
+	require.NoError(t, err)
+
+	block := make(chan struct{})
+	var discarded atomic.Int64
+
+	r := &Reader{Parent: &nilLogger{}, OnDiscard: func() { discarded.Add(1) }}
+	r.OnData(desc.Medias[0], desc.Medias[0].Formats[0], func(*unit.Unit) error {
+		<-block
+		return nil
+	})
+	strm.AddReader(r)
+	defer strm.RemoveReader(r)
+	defer close(block)
+
+	for i := range 64 {
+		subStream.WriteUnit(desc.Medias[0], desc.Medias[0].Formats[0], &unit.Unit{
+			PTS:     int64(i),
+			Payload: unit.PayloadH264{{5, 1}},
+		})
+	}
+
+	require.Positive(t, discarded.Load(), "a reader that cannot keep up gets discards reported")
 }

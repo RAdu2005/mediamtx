@@ -705,6 +705,8 @@ components:
           type: array
           items:
             type: string
+        webrtcAllowPausePatch:
+          type: boolean
         webrtcDisable:
           type: boolean
           nullable: true
@@ -747,9 +749,13 @@ components:
           type: array
           items:
             type: string
+        webrtcKeyFrameRequestPeriod:
+          type: string
         webrtcLocalTCPAddress:
           type: string
         webrtcLocalUDPAddress:
+          type: string
+        webrtcPausedTimeout:
           type: string
         webrtcSTUNGatherTimeout:
           type: string
@@ -2708,6 +2714,8 @@ components:
     WebRTCSession:
       type: object
       properties:
+        audioPaused:
+          type: boolean
         bytesReceived:
           type: integer
           format: uint64
@@ -2753,6 +2761,11 @@ components:
           format: uint64
         path:
           type: string
+        paused:
+          type: boolean
+        pausedSince:
+          type: string
+          nullable: true
         peerConnectionEstablished:
           type: boolean
         query:
@@ -2791,6 +2804,8 @@ components:
           type: string
         userAgent:
           type: string
+        videoPaused:
+          type: boolean
 
     WebRTCSessionList:
       type: object
@@ -4457,6 +4472,110 @@ paths:
                 $ref: "#/components/schemas/OK"
         "400":
           description: invalid request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: session not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v3/webrtc/sessions/pause/{id}:
+    post:
+      operationId: webrtcSessionsPause
+      tags: [WebRTC]
+      summary: pauses a WebRTC session without closing it.
+      description: >-
+        Applies to reading (WHEP) sessions only. Without a body, both video
+        and audio are selected; with a body, only the kinds set to true.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID of the session.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                video:
+                  type: boolean
+                audio:
+                  type: boolean
+      responses:
+        "200":
+          description: the request was successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OK"
+        "400":
+          description: invalid request, or the session is publishing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: session not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v3/webrtc/sessions/resume/{id}:
+    post:
+      operationId: webrtcSessionsResume
+      tags: [WebRTC]
+      summary: resumes a paused WebRTC session; video restarts from the next key frame.
+      description: >-
+        Applies to reading (WHEP) sessions only. Without a body, both video
+        and audio are selected; with a body, only the kinds set to true.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID of the session.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                video:
+                  type: boolean
+                audio:
+                  type: boolean
+      responses:
+        "200":
+          description: the request was successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OK"
+        "400":
+          description: invalid request, or the session is publishing.
           content:
             application/json:
               schema:

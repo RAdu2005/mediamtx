@@ -208,6 +208,8 @@ func (a *API) Initialize() error {
 		group.GET("/webrtc/sessions/list", a.onWebRTCSessionsList)
 		group.GET("/webrtc/sessions/get/:id", a.onWebRTCSessionsGet)
 		group.POST("/webrtc/sessions/kick/:id", a.onWebRTCSessionsKick)
+		group.POST("/webrtc/sessions/pause/:id", a.onWebRTCSessionsPause)
+		group.POST("/webrtc/sessions/resume/:id", a.onWebRTCSessionsResume)
 
 		// deprecated
 		group.GET("/webrtcsessions/list", a.onWebRTCSessionsList)

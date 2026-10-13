@@ -83,6 +83,7 @@ func initializeTestServer(t *testing.T) *Server {
 		ICEServers:            []conf.WebRTCICEServer{},
 		HandshakeTimeout:      conf.Duration(10 * time.Second),
 		TrackGatherTimeout:    conf.Duration(2 * time.Second),
+		AllowPausePatch:       true,
 		STUNGatherTimeout:     conf.Duration(5 * time.Second),
 		PathManager:           pm,
 		Parent:                test.NilLogger,
@@ -507,9 +508,10 @@ func TestServerRead(t *testing.T) {
 				}},
 			}},
 			&unit.Unit{
-				Payload: unit.PayloadAV1{{1, 2}},
+				// a key frame (sequence header OBU): readers start from a key frame.
+				Payload: unit.PayloadAV1{{0x08, 2}},
 			},
-			[]byte{0x10, 0x01, 0x02},
+			[]byte{0x18, 0x08, 0x02}, // N bit: a new coded video sequence
 		},
 		{
 			"vp9",
@@ -537,9 +539,10 @@ func TestServerRead(t *testing.T) {
 				}},
 			}},
 			&unit.Unit{
-				Payload: unit.PayloadVP8{1, 2},
+				// a key frame: readers start from a key frame.
+				Payload: unit.PayloadVP8{0, 2},
 			},
-			[]byte{0x10, 1, 2},
+			[]byte{0x10, 0, 2},
 		},
 		{
 			"h264",
@@ -820,6 +823,7 @@ func TestServerReadPause(t *testing.T) {
 				STUNGatherTimeout:     conf.Duration(5 * time.Second),
 				HandshakeTimeout:      conf.Duration(10 * time.Second),
 				TrackGatherTimeout:    conf.Duration(2 * time.Second),
+				AllowPausePatch:       true,
 				PathManager: &test.PathManager{
 					FindPathConfImpl: func(_ defs.PathFindPathConfReq) (*defs.PathFindPathConfRes, error) {
 						return &defs.PathFindPathConfRes{Conf: &conf.Path{}}, nil
@@ -1010,6 +1014,28 @@ func TestServerPatchPausedNotFound(t *testing.T) {
 	defer res.Body.Close()
 
 	require.Equal(t, http.StatusNotFound, res.StatusCode)
+}
+
+func TestServerPatchPausedDisabled(t *testing.T) {
+	s := initializeTestServer(t)
+	s.AllowPausePatch = false
+	defer s.Close()
+
+	tr := &http.Transport{}
+	defer tr.CloseIdleConnections()
+	hc := &http.Client{Transport: tr}
+
+	req, err := http.NewRequest(http.MethodPatch,
+		"http://localhost:8886/nonexisting/whep/"+uuid.UUID{}.String(), bytes.NewReader([]byte(`{"paused":false}`)))
+	require.NoError(t, err)
+
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := hc.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
 }
 
 func TestServerReadNotFound(t *testing.T) {

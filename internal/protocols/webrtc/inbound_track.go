@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	keyFrameInterval  = 2 * time.Second
-	mimeTypeMultiopus = "audio/multiopus"
-	mimeTypeL16       = "audio/L16"
+	defaultKeyFrameRequestPeriod = 2 * time.Second
+	mimeTypeMultiopus            = "audio/multiopus"
+	mimeTypeL16                  = "audio/L16"
 )
 
 var incomingVideoCodecs = []webrtc.RTPCodecParameters{
@@ -323,6 +323,8 @@ type InboundTrack struct {
 	writeRTCP func([]rtcp.Packet) error
 	log       logger.Writer
 
+	keyFrameRequestPeriod time.Duration
+
 	twccExtID             uint8
 	inboundRTPPacketsLost *counterdumper.Dumper
 	rtpReceiver           *rtpreceiver.Receiver
@@ -362,6 +364,19 @@ func (t *InboundTrack) ClockRate() int {
 // PTSEqualsDTS returns whether PTS equals DTS. Needed by rtptime.GlobalDecoder
 func (*InboundTrack) PTSEqualsDTS(*rtp.Packet) bool {
 	return true
+}
+
+// requestKeyFrame asks the publisher for a key frame. It does nothing on
+// audio tracks.
+func (t *InboundTrack) requestKeyFrame() error {
+	if t.track.Kind() != webrtc.RTPCodecTypeVideo {
+		return nil
+	}
+	return t.writeRTCP([]rtcp.Packet{
+		&rtcp.PictureLossIndication{
+			MediaSSRC: uint32(t.track.SSRC()),
+		},
+	})
 }
 
 func inboundTrackReorderBufferSize(kind webrtc.RTPCodecType) int {
@@ -427,18 +442,18 @@ func (t *InboundTrack) start() {
 		}
 	}()
 
-	// send period key frame requests
-	if t.track.Kind() == webrtc.RTPCodecTypeVideo {
+	// send periodic key frame requests
+	period := t.keyFrameRequestPeriod
+	if period == 0 {
+		period = defaultKeyFrameRequestPeriod
+	}
+	if t.track.Kind() == webrtc.RTPCodecTypeVideo && period > 0 {
 		go func() {
-			keyframeTicker := time.NewTicker(keyFrameInterval)
+			keyframeTicker := time.NewTicker(period)
 			defer keyframeTicker.Stop()
 
 			for range keyframeTicker.C {
-				err2 := t.writeRTCP([]rtcp.Packet{
-					&rtcp.PictureLossIndication{
-						MediaSSRC: uint32(t.track.SSRC()),
-					},
-				})
+				err2 := t.requestKeyFrame()
 				if err2 != nil {
 					return
 				}

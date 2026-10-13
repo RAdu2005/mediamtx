@@ -247,6 +247,8 @@ type session struct {
 	stunGatherTimeout            conf.Duration
 	handshakeTimeout             conf.Duration
 	trackGatherTimeout           conf.Duration
+	keyFrameRequestPeriod        conf.Duration
+	pausedTimeout                conf.Duration
 	remoteAddr                   string
 	pathName                     string
 	query                        string
@@ -255,6 +257,7 @@ type session struct {
 	offer                        []byte
 	publish                      bool
 	paused                       bool
+	previewPaused                bool
 	wg                           *sync.WaitGroup
 	externalCmdPool              *externalcmd.Pool
 	pathManager                  serverPathManager
@@ -272,7 +275,16 @@ type session struct {
 
 	chInitialRequest chan initialRequestReq
 	chAddCandidates  chan addSessionCandidatesReq
-	chSetPaused      chan setSessionPausedReq
+
+	// pause state. Requests are stored here and applied to the peer
+	// connection once it exists, so they never block.
+	pauseMutex  sync.Mutex
+	pausablePC  *webrtc.PeerConnection
+	hasVideo    bool
+	hasAudio    bool
+	videoPaused bool
+	audioPaused bool
+	pausedSince time.Time
 }
 
 func (s *session) initialize() {
@@ -282,7 +294,6 @@ func (s *session) initialize() {
 	s.secret = uuid.New()
 	s.chInitialRequest = make(chan initialRequestReq)
 	s.chAddCandidates = make(chan addSessionCandidatesReq)
-	s.chSetPaused = make(chan setSessionPausedReq)
 
 	s.Log(logger.Info, "created by %s", s.remoteAddr)
 
@@ -382,6 +393,7 @@ func (s *session) runPublish(req *initialRequestReq) (int, error) {
 		AdditionalHosts:              s.additionalHosts,
 		STUNGatherTimeout:            time.Duration(s.stunGatherTimeout),
 		Publish:                      false,
+		KeyFrameRequestPeriod:        keyFrameRequestPeriod(s.keyFrameRequestPeriod),
 		Log:                          s,
 	}
 	err = pc.Start()
@@ -476,6 +488,10 @@ func (s *session) runPublish(req *initialRequestReq) (int, error) {
 
 	subStream = res2.SubStream
 
+	// readers that join, resume or fall behind ask for a key frame through
+	// the stream.
+	defer res2.SubStream.Stream.SetKeyFrameRequester(pc.RequestKeyFrame)()
+
 	pc.StartReading()
 
 	select {
@@ -544,10 +560,15 @@ func (s *session) runRead(req *initialRequestReq) (int, error) {
 		return http.StatusBadRequest, err
 	}
 
-	if s.paused {
-		pc.StartPaused()
-		s.Log(logger.Info, "starting paused")
-	}
+	pc.SetKeyFrameRequester(func(retry bool) {
+		res.Stream.RequestKeyFrame()
+		if retry {
+			s.Log(logger.Warn, "no key frame received yet, asking the source again")
+		}
+	})
+	r.OnDiscard = pc.RequireKeyFrame
+
+	s.attachPausable(pc)
 
 	err = pc.Start()
 	if err != nil {
@@ -611,16 +632,140 @@ func (s *session) runRead(req *initialRequestReq) (int, error) {
 	s.reader = r
 	s.mutex.Unlock()
 
-	select {
-	case <-pc.Failed():
-		return 0, fmt.Errorf("peer connection closed")
+	pausedCheck := time.NewTicker(time.Second)
+	defer pausedCheck.Stop()
 
-	case err = <-r.Error():
-		return 0, err
+	for {
+		select {
+		case <-pc.Failed():
+			return 0, fmt.Errorf("peer connection closed")
 
-	case <-s.ctx.Done():
-		return 0, fmt.Errorf("terminated")
+		case err = <-r.Error():
+			return 0, err
+
+		case <-pausedCheck.C:
+			if s.pausedTooLong(time.Now()) {
+				return 0, fmt.Errorf("paused for longer than %v", time.Duration(s.pausedTimeout))
+			}
+
+		case <-s.ctx.Done():
+			return 0, fmt.Errorf("terminated")
+		}
 	}
+}
+
+// keyFrameRequestPeriod converts the configuration value, where zero
+// disables periodic requests, to webrtc.PeerConnection's convention.
+func keyFrameRequestPeriod(d conf.Duration) time.Duration {
+	if d == 0 {
+		return -1
+	}
+	return time.Duration(d)
+}
+
+// attachPausable applies the pause state to the reader's peer connection,
+// once its outbound tracks exist and before it starts.
+func (s *session) attachPausable(pc *webrtc.PeerConnection) {
+	s.pauseMutex.Lock()
+	defer s.pauseMutex.Unlock()
+
+	s.pausablePC = pc
+	for _, track := range pc.OutboundTracks {
+		if strings.HasPrefix(track.Caps.MimeType, "video/") {
+			s.hasVideo = true
+		} else {
+			s.hasAudio = true
+		}
+	}
+
+	if s.paused {
+		s.videoPaused, s.audioPaused = true, true
+		pc.StartPaused(s.previewPaused)
+		if s.previewPaused {
+			s.Log(logger.Info, "starting paused, after a preview frame")
+		} else {
+			s.Log(logger.Info, "starting paused")
+		}
+	} else if s.videoPaused || s.audioPaused {
+		pc.SetPaused(s.videoPaused, s.audioPaused, true)
+	}
+
+	s.updatePausedSince(time.Now())
+}
+
+// setPaused pauses or resumes the selected tracks. It never blocks: before
+// the peer connection exists, the request is stored and applied when it does.
+func (s *session) setPaused(tracks PauseTracks, paused bool) error {
+	if s.publish {
+		return ErrSessionNotReading
+	}
+
+	s.pauseMutex.Lock()
+	defer s.pauseMutex.Unlock()
+
+	if tracks.Video {
+		s.videoPaused = paused
+	}
+	if tracks.Audio {
+		s.audioPaused = paused
+	}
+	if s.pausablePC != nil {
+		s.pausablePC.SetPaused(tracks.Video, tracks.Audio, paused)
+	}
+	s.updatePausedSince(time.Now())
+
+	verb := "resumed"
+	if paused {
+		verb = "paused"
+	}
+	switch {
+	case tracks.Video && tracks.Audio:
+		s.Log(logger.Info, "%s", verb)
+	case tracks.Video:
+		s.Log(logger.Info, "%s video", verb)
+	case tracks.Audio:
+		s.Log(logger.Info, "%s audio", verb)
+	}
+	return nil
+}
+
+// fullyPausedLocked reports whether every track of the session is paused.
+func (s *session) fullyPausedLocked() bool {
+	if s.pausablePC == nil {
+		return s.videoPaused && s.audioPaused
+	}
+	return (!s.hasVideo || s.videoPaused) && (!s.hasAudio || s.audioPaused)
+}
+
+func (s *session) updatePausedSince(now time.Time) {
+	switch {
+	case !s.fullyPausedLocked():
+		s.pausedSince = time.Time{}
+	case s.pausedSince.IsZero():
+		s.pausedSince = now
+	}
+}
+
+// pausedTooLong reports whether the session has been fully paused for longer
+// than webrtcPausedTimeout, in case whoever paused it never closes it.
+func (s *session) pausedTooLong(now time.Time) bool {
+	if s.pausedTimeout <= 0 {
+		return false
+	}
+	s.pauseMutex.Lock()
+	defer s.pauseMutex.Unlock()
+	return !s.pausedSince.IsZero() && now.Sub(s.pausedSince) > time.Duration(s.pausedTimeout)
+}
+
+// pauseState returns what the API reports about pausing.
+func (s *session) pauseState() (paused bool, since *time.Time, video bool, audio bool) {
+	s.pauseMutex.Lock()
+	defer s.pauseMutex.Unlock()
+	if !s.pausedSince.IsZero() {
+		t := s.pausedSince
+		since = &t
+	}
+	return s.fullyPausedLocked(), since, s.videoPaused, s.audioPaused
 }
 
 func (s *session) readRemoteCandidates(offer []byte, pc *webrtc.PeerConnection) {
@@ -676,15 +821,6 @@ func (s *session) readRemoteCandidates(offer []byte, pc *webrtc.PeerConnection) 
 				req.res <- addSessionCandidatesRes{}
 			}
 
-		case req := <-s.chSetPaused:
-			pc.SetPaused(req.paused)
-			if req.paused {
-				s.Log(logger.Info, "paused")
-			} else {
-				s.Log(logger.Info, "resumed")
-			}
-			req.res <- setSessionPausedRes{}
-
 		case <-s.ctx.Done():
 			return
 		}
@@ -713,19 +849,6 @@ func (s *session) addCandidates(
 
 	case <-s.ctx.Done():
 		return addSessionCandidatesRes{err: fmt.Errorf("terminated")}
-	}
-}
-
-// setPaused is called by webRTCHTTPServer through Server.
-func (s *session) setPaused(
-	req setSessionPausedReq,
-) setSessionPausedRes {
-	select {
-	case s.chSetPaused <- req:
-		return <-req.res
-
-	case <-s.ctx.Done():
-		return setSessionPausedRes{err: fmt.Errorf("terminated")}
 	}
 }
 
@@ -781,6 +904,8 @@ func (s *session) apiItem() *defs.APIWebRTCSession {
 		outboundFramesDiscarded = s.reader.OutboundFramesDiscarded()
 	}
 
+	paused, pausedSince, videoPaused, audioPaused := s.pauseState()
+
 	return &defs.APIWebRTCSession{
 		ID:                        s.uuid,
 		Created:                   s.created,
@@ -807,6 +932,10 @@ func (s *session) apiItem() *defs.APIWebRTCSession {
 		OutboundRTPPackets:      rtpPacketsSent,
 		OutboundRTCPPackets:     rtcpPacketsSent,
 		OutboundFramesDiscarded: outboundFramesDiscarded,
+		Paused:                  paused,
+		PausedSince:             pausedSince,
+		VideoPaused:             videoPaused,
+		AudioPaused:             audioPaused,
 		BytesReceived:           bytesReceived,
 		BytesSent:               bytesSent,
 		RTPPacketsReceived:      rtpPacketsReceived,

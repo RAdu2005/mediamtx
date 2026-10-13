@@ -11,6 +11,8 @@ type APIWebRTCServer interface {
 	APISessionsList() (*APIWebRTCSessionList, error)
 	APISessionsGet(uuid.UUID) (*APIWebRTCSession, error)
 	APISessionsKick(uuid.UUID) error
+	APISessionsPause(id uuid.UUID, video bool, audio bool) error
+	APISessionsResume(id uuid.UUID, video bool, audio bool) error
 }
 
 // APIWebRTCSessionState is the state of a WebRTC connection.
@@ -44,6 +46,10 @@ type APIWebRTCSession struct {
 	OutboundRTPPackets        uint64                `json:"outboundRTPPackets"`
 	OutboundRTCPPackets       uint64                `json:"outboundRTCPPackets"`
 	OutboundFramesDiscarded   uint64                `json:"outboundFramesDiscarded"`
+	Paused                    bool                  `json:"paused"`
+	PausedSince               *time.Time            `json:"pausedSince"`
+	VideoPaused               bool                  `json:"videoPaused"`
+	AudioPaused               bool                  `json:"audioPaused"`
 
 	// deprecated
 	BytesReceived       uint64  `json:"bytesReceived" deprecated:"true"`

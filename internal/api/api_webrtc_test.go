@@ -3,6 +3,7 @@ package api //nolint:revive
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 type testWebRTCServer struct {
 	sessions map[uuid.UUID]*defs.APIWebRTCSession
+	pauses   []string
 }
 
 func (s *testWebRTCServer) APISessionsList() (*defs.APIWebRTCSessionList, error) {
@@ -40,6 +42,26 @@ func (s *testWebRTCServer) APISessionsKick(id uuid.UUID) error {
 	if !ok {
 		return webrtc.ErrSessionNotFound
 	}
+	return nil
+}
+
+func (s *testWebRTCServer) APISessionsPause(id uuid.UUID, video bool, audio bool) error {
+	return s.recordPause("pause", id, video, audio)
+}
+
+func (s *testWebRTCServer) APISessionsResume(id uuid.UUID, video bool, audio bool) error {
+	return s.recordPause("resume", id, video, audio)
+}
+
+func (s *testWebRTCServer) recordPause(op string, id uuid.UUID, video bool, audio bool) error {
+	session, ok := s.sessions[id]
+	if !ok {
+		return webrtc.ErrSessionNotFound
+	}
+	if session.State == defs.APIWebRTCSessionStatePublish {
+		return webrtc.ErrSessionNotReading
+	}
+	s.pauses = append(s.pauses, fmt.Sprintf("%s video=%v audio=%v", op, video, audio))
 	return nil
 }
 
@@ -262,4 +284,66 @@ func TestWebRTCSessionsKick(t *testing.T) {
 	hc := &http.Client{Transport: tr}
 
 	httpRequest(t, hc, http.MethodPost, fmt.Sprintf("http://localhost:9997/v3/webrtcsessions/kick/%s", id), nil, nil)
+}
+
+func TestWebRTCSessionsPauseResume(t *testing.T) {
+	reader := uuid.New()
+	publisher := uuid.New()
+
+	webrtcServer := &testWebRTCServer{
+		sessions: map[uuid.UUID]*defs.APIWebRTCSession{
+			reader:    {ID: reader, State: defs.APIWebRTCSessionStateRead},
+			publisher: {ID: publisher, State: defs.APIWebRTCSessionStatePublish},
+		},
+	}
+
+	api := API{
+		Address:      "localhost:9997",
+		ReadTimeout:  conf.Duration(10 * time.Second),
+		WriteTimeout: conf.Duration(10 * time.Second),
+		AuthManager:  test.NilAuthManager,
+		WebRTCServer: webrtcServer,
+		Parent:       &testParent{},
+	}
+	err := api.Initialize()
+	require.NoError(t, err)
+	defer api.Close()
+
+	tr := &http.Transport{}
+	defer tr.CloseIdleConnections()
+	hc := &http.Client{Transport: tr}
+
+	u := func(op string, id uuid.UUID) string {
+		return fmt.Sprintf("http://localhost:9997/v3/webrtc/sessions/%s/%s", op, id)
+	}
+
+	httpRequest(t, hc, http.MethodPost, u("pause", reader), nil, nil)
+	httpRequest(t, hc, http.MethodPost, u("pause", reader), map[string]any{"video": true}, nil)
+	httpRequest(t, hc, http.MethodPost, u("resume", reader), map[string]any{"audio": true, "video": false}, nil)
+	httpRequest(t, hc, http.MethodPost, u("resume", reader), nil, nil)
+
+	require.Equal(t, []string{
+		"pause video=true audio=true",
+		"pause video=true audio=false",
+		"resume video=false audio=true",
+		"resume video=true audio=true",
+	}, webrtcServer.pauses)
+
+	for _, ca := range []struct {
+		url    string
+		body   string
+		status int
+	}{
+		{u("pause", uuid.New()), "", http.StatusNotFound},
+		{u("pause", publisher), "", http.StatusBadRequest},
+		{"http://localhost:9997/v3/webrtc/sessions/pause/invalid", "", http.StatusBadRequest},
+		{u("pause", reader), "{", http.StatusBadRequest},
+	} {
+		req, err2 := http.NewRequest(http.MethodPost, ca.url, strings.NewReader(ca.body))
+		require.NoError(t, err2)
+		res, err2 := hc.Do(req)
+		require.NoError(t, err2)
+		res.Body.Close()
+		require.Equal(t, ca.status, res.StatusCode, ca.url)
+	}
 }

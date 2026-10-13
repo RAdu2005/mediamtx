@@ -44,6 +44,10 @@ var ErrSessionNotFound = errors.New("session not found")
 // ErrSessionNotReading is returned when pausing a session that is not reading.
 var ErrSessionNotReading = errors.New("only WHEP sessions can be paused")
 
+// ErrPausePatchDisabled is returned when a client tries to pause its own
+// session while webrtcAllowPausePatch is off.
+var ErrPausePatchDisabled = errors.New("pausing with PATCH is disabled; use the API")
+
 func interfaceIsEmpty(i any) bool {
 	return reflect.ValueOf(i).Kind() != reflect.Pointer || reflect.ValueOf(i).IsNil()
 }
@@ -152,6 +156,7 @@ type newSessionReq struct {
 	offer       []byte
 	publish     bool
 	paused      bool
+	preview     bool
 	res         chan newSessionRes
 }
 
@@ -167,16 +172,20 @@ type addSessionCandidatesReq struct {
 	res      chan addSessionCandidatesRes
 }
 
-type setSessionPausedRes struct {
-	sx  *session
-	err error
+type findSessionReq struct {
+	secret *uuid.UUID
+	id     *uuid.UUID
+	res    chan *session
 }
 
-type setSessionPausedReq struct {
-	secret uuid.UUID
-	paused bool
-	res    chan setSessionPausedRes
+// PauseTracks selects the tracks that a pause or resume applies to.
+type PauseTracks struct {
+	Video bool
+	Audio bool
 }
+
+// AllTracks selects both video and audio.
+var AllTracks = PauseTracks{Video: true, Audio: true}
 
 type deleteSessionRes struct {
 	err error
@@ -225,10 +234,18 @@ type Server struct {
 	STUNGatherTimeout            conf.Duration
 	HandshakeTimeout             conf.Duration
 	TrackGatherTimeout           conf.Duration
-	ExternalCmdPool              *externalcmd.Pool
-	Metrics                      serverMetrics
-	PathManager                  serverPathManager
-	Parent                       serverParent
+	// KeyFrameRequestPeriod is how often publishers are asked for a key
+	// frame; zero disables the periodic requests.
+	KeyFrameRequestPeriod conf.Duration
+	// AllowPausePatch allows clients to pause and resume their own WHEP
+	// session with a JSON PATCH. The API endpoints work regardless.
+	AllowPausePatch bool
+	// PausedTimeout closes sessions that stay paused longer; zero disables it.
+	PausedTimeout   conf.Duration
+	ExternalCmdPool *externalcmd.Pool
+	Metrics         serverMetrics
+	PathManager     serverPathManager
+	Parent          serverParent
 
 	ctx              context.Context
 	ctxCancel        func()
@@ -245,7 +262,7 @@ type Server struct {
 	chNewSession           chan newSessionReq
 	chCloseSession         chan *session
 	chAddSessionCandidates chan addSessionCandidatesReq
-	chSetSessionPaused     chan setSessionPausedReq
+	chFindSession          chan findSessionReq
 	chDeleteSession        chan deleteSessionReq
 	chAPISessionsList      chan serverAPISessionsListReq
 	chAPISessionsGet       chan serverAPISessionsGetReq
@@ -266,7 +283,7 @@ func (s *Server) Initialize() error {
 	s.chNewSession = make(chan newSessionReq)
 	s.chCloseSession = make(chan *session)
 	s.chAddSessionCandidates = make(chan addSessionCandidatesReq)
-	s.chSetSessionPaused = make(chan setSessionPausedReq)
+	s.chFindSession = make(chan findSessionReq)
 	s.chDeleteSession = make(chan deleteSessionReq)
 	s.chAPISessionsList = make(chan serverAPISessionsListReq)
 	s.chAPISessionsGet = make(chan serverAPISessionsGetReq)
@@ -413,6 +430,9 @@ outer:
 				stunGatherTimeout:            s.STUNGatherTimeout,
 				handshakeTimeout:             s.HandshakeTimeout,
 				trackGatherTimeout:           s.TrackGatherTimeout,
+				keyFrameRequestPeriod:        s.KeyFrameRequestPeriod,
+				pausedTimeout:                s.PausedTimeout,
+				previewPaused:                req.preview,
 				remoteAddr:                   req.remoteAddr,
 				pathName:                     req.pathName,
 				query:                        req.query,
@@ -444,19 +464,12 @@ outer:
 
 			req.res <- addSessionCandidatesRes{sx: sx}
 
-		case req := <-s.chSetSessionPaused:
-			sx, ok := s.sessionsBySecret[req.secret]
-			if !ok {
-				req.res <- setSessionPausedRes{err: ErrSessionNotFound}
-				continue
+		case req := <-s.chFindSession:
+			if req.secret != nil {
+				req.res <- s.sessionsBySecret[*req.secret]
+			} else {
+				req.res <- s.findSessionByUUID(*req.id)
 			}
-
-			if sx.publish {
-				req.res <- setSessionPausedRes{err: ErrSessionNotReading}
-				continue
-			}
-
-			req.res <- setSessionPausedRes{sx: sx}
 
 		case req := <-s.chDeleteSession:
 			sx, ok := s.sessionsBySecret[req.secret]
@@ -612,23 +625,50 @@ func (s *Server) addSessionCandidates(
 	}
 }
 
-// setSessionPaused is called by webRTCHTTPServer.
-func (s *Server) setSessionPaused(
-	req setSessionPausedReq,
-) setSessionPausedRes {
-	req.res = make(chan setSessionPausedRes)
+func (s *Server) findSession(req findSessionReq) (*session, error) {
+	req.res = make(chan *session)
 	select {
-	case s.chSetSessionPaused <- req:
-		res1 := <-req.res
-		if res1.err != nil {
-			return res1
+	case s.chFindSession <- req:
+		sx := <-req.res
+		if sx == nil {
+			return nil, ErrSessionNotFound
 		}
-
-		return res1.sx.setPaused(req)
+		return sx, nil
 
 	case <-s.ctx.Done():
-		return setSessionPausedRes{err: fmt.Errorf("terminated")}
+		return nil, fmt.Errorf("terminated")
 	}
+}
+
+// setSessionPaused is called by webRTCHTTPServer for a client's own session.
+// It never blocks on the session.
+func (s *Server) setSessionPaused(secret uuid.UUID, paused bool) error {
+	if !s.AllowPausePatch {
+		return ErrPausePatchDisabled
+	}
+	sx, err := s.findSession(findSessionReq{secret: &secret})
+	if err != nil {
+		return err
+	}
+	return sx.setPaused(AllTracks, paused)
+}
+
+// APISessionsPause implements defs.APIWebRTCServer.
+func (s *Server) APISessionsPause(uuid uuid.UUID, video bool, audio bool) error {
+	sx, err := s.findSession(findSessionReq{id: &uuid})
+	if err != nil {
+		return err
+	}
+	return sx.setPaused(PauseTracks{Video: video, Audio: audio}, true)
+}
+
+// APISessionsResume implements defs.APIWebRTCServer.
+func (s *Server) APISessionsResume(uuid uuid.UUID, video bool, audio bool) error {
+	sx, err := s.findSession(findSessionReq{id: &uuid})
+	if err != nil {
+		return err
+	}
+	return sx.setPaused(PauseTracks{Video: video, Audio: audio}, false)
 }
 
 // deleteSession is called by webRTCHTTPServer.

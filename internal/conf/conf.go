@@ -392,6 +392,9 @@ type Conf struct {
 	WebRTCSTUNGatherTimeout            Duration          `json:"webrtcSTUNGatherTimeout"`
 	WebRTCHandshakeTimeout             Duration          `json:"webrtcHandshakeTimeout"`
 	WebRTCTrackGatherTimeout           Duration          `json:"webrtcTrackGatherTimeout"`
+	WebRTCKeyFrameRequestPeriod        Duration          `json:"webrtcKeyFrameRequestPeriod"`
+	WebRTCAllowPausePatch              bool              `json:"webrtcAllowPausePatch"`
+	WebRTCPausedTimeout                Duration          `json:"webrtcPausedTimeout"`
 	WebRTCICEUDPMuxAddress             *string           `json:"webrtcICEUDPMuxAddress,omitempty" deprecated:"true"`
 	WebRTCICETCPMuxAddress             *string           `json:"webrtcICETCPMuxAddress,omitempty" deprecated:"true"`
 	WebRTCICEHostNAT1To1IPs            *[]string         `json:"webrtcICEHostNAT1To1IPs,omitempty" deprecated:"true"`
@@ -525,6 +528,9 @@ func (conf *Conf) setDefaults() {
 	conf.WebRTCSTUNGatherTimeout = 5 * Duration(time.Second)
 	conf.WebRTCHandshakeTimeout = 10 * Duration(time.Second)
 	conf.WebRTCTrackGatherTimeout = 2 * Duration(time.Second)
+	conf.WebRTCKeyFrameRequestPeriod = 2 * Duration(time.Second)
+	conf.WebRTCAllowPausePatch = true
+	conf.WebRTCPausedTimeout = 2 * Duration(time.Minute)
 
 	// SRT server
 	conf.SRT = true

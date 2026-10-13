@@ -861,6 +861,9 @@ func (p *Core) createResources(initial bool) error {
 			STUNGatherTimeout:            currentConf.WebRTCSTUNGatherTimeout,
 			HandshakeTimeout:             currentConf.WebRTCHandshakeTimeout,
 			TrackGatherTimeout:           currentConf.WebRTCTrackGatherTimeout,
+			KeyFrameRequestPeriod:        currentConf.WebRTCKeyFrameRequestPeriod,
+			AllowPausePatch:              currentConf.WebRTCAllowPausePatch,
+			PausedTimeout:                currentConf.WebRTCPausedTimeout,
 			ExternalCmdPool:              p.externalCmdPool,
 			Metrics:                      p.metrics,
 			PathManager:                  p.pathManager,
@@ -1191,6 +1194,9 @@ func (p *Core) closeResources(newConf *conf.Conf) {
 		newConf.WebRTCSTUNGatherTimeout != currentConf.WebRTCSTUNGatherTimeout ||
 		newConf.WebRTCHandshakeTimeout != currentConf.WebRTCHandshakeTimeout ||
 		newConf.WebRTCTrackGatherTimeout != currentConf.WebRTCTrackGatherTimeout ||
+		newConf.WebRTCKeyFrameRequestPeriod != currentConf.WebRTCKeyFrameRequestPeriod ||
+		newConf.WebRTCAllowPausePatch != currentConf.WebRTCAllowPausePatch ||
+		newConf.WebRTCPausedTimeout != currentConf.WebRTCPausedTimeout ||
 		newConf.DumpPackets != currentConf.DumpPackets ||
 		closeMetrics ||
 		closePathManager ||

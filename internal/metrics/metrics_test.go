@@ -361,6 +361,14 @@ func (dummyWebRTCServer) APISessionsKick(uuid.UUID) error {
 	panic("unused")
 }
 
+func (dummyWebRTCServer) APISessionsPause(uuid.UUID, bool, bool) error {
+	panic("unused")
+}
+
+func (dummyWebRTCServer) APISessionsResume(uuid.UUID, bool, bool) error {
+	panic("unused")
+}
+
 type dummyMoQServer struct{}
 
 func (dummyMoQServer) APISessionsList() (*defs.APIMoQSessionList, error) {
@@ -479,6 +487,14 @@ func (emptyWebRTCServer) APISessionsGet(uuid.UUID) (*defs.APIWebRTCSession, erro
 }
 
 func (emptyWebRTCServer) APISessionsKick(uuid.UUID) error {
+	panic("unused")
+}
+
+func (emptyWebRTCServer) APISessionsPause(uuid.UUID, bool, bool) error {
+	panic("unused")
+}
+
+func (emptyWebRTCServer) APISessionsResume(uuid.UUID, bool, bool) error {
 	panic("unused")
 }
 

@@ -157,6 +157,9 @@ func (s *Source) Run(params defs.StaticSourceRunParams) error {
 
 	subStream = rres.SubStream
 
+	// readers that join, resume or fall behind ask for a key frame.
+	defer subStream.Stream.SetKeyFrameRequester(client.PeerConnection().RequestKeyFrame)()
+
 	client.StartReading()
 
 	readErr := make(chan error)

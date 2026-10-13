@@ -216,6 +216,18 @@ func (s *httpServer) onWHIPPost(ctx *gin.Context, pathName string, publish bool)
 		}
 	}
 
+	// ?paused=true&preview=false sends nothing at all until resumed, so that
+	// opening many paused sessions does not cost a burst of key frames.
+	preview := true
+	if v, ok := ctx.GetQuery("preview"); ok {
+		var err error
+		preview, err = strconv.ParseBool(v)
+		if err != nil {
+			s.writeErrorNoLog(ctx, http.StatusBadRequest, fmt.Errorf("invalid 'preview': %w", err))
+			return
+		}
+	}
+
 	offer, err := io.ReadAll(&customLimitReader{ctx.Request.Body, maxInboundSDPSize})
 	if err != nil {
 		return
@@ -229,6 +241,7 @@ func (s *httpServer) onWHIPPost(ctx *gin.Context, pathName string, publish bool)
 		credentials: httpp.Credentials(ctx.Request),
 		publish:     publish,
 		paused:      paused,
+		preview:     preview,
 		offer:       offer,
 	})
 	if res.err != nil {
@@ -362,18 +375,17 @@ func (s *httpServer) onWHEPPatchPaused(ctx *gin.Context, secret uuid.UUID) {
 		return
 	}
 
-	res := s.parent.setSessionPaused(setSessionPausedReq{
-		secret: secret,
-		paused: *body.Paused,
-	})
-	if res.err != nil {
+	err = s.parent.setSessionPaused(secret, *body.Paused)
+	if err != nil {
 		switch {
-		case errors.Is(res.err, ErrSessionNotFound):
-			s.writeErrorNoLog(ctx, http.StatusNotFound, res.err)
-		case errors.Is(res.err, ErrSessionNotReading):
-			s.writeErrorNoLog(ctx, http.StatusBadRequest, res.err)
+		case errors.Is(err, ErrSessionNotFound):
+			s.writeErrorNoLog(ctx, http.StatusNotFound, err)
+		case errors.Is(err, ErrSessionNotReading):
+			s.writeErrorNoLog(ctx, http.StatusBadRequest, err)
+		case errors.Is(err, ErrPausePatchDisabled):
+			s.writeErrorNoLog(ctx, http.StatusForbidden, err)
 		default:
-			s.writeErrorNoLog(ctx, http.StatusInternalServerError, res.err)
+			s.writeErrorNoLog(ctx, http.StatusInternalServerError, err)
 		}
 		return
 	}

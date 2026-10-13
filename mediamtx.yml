@@ -433,6 +433,16 @@ webrtcSTUNGatherTimeout: 5s
 webrtcHandshakeTimeout: 10s
 # Maximum time to gather tracks.
 webrtcTrackGatherTimeout: 2s
+# How often publishers are asked for a key frame. Readers that join, resume
+# or fall behind ask for one too, so this can be much longer, for instance
+# for screen sharing. 0s disables the periodic requests.
+webrtcKeyFrameRequestPeriod: 2s
+# Allow clients to pause and resume their own WHEP session with a JSON PATCH
+# ({"paused": true}). The API endpoints /v3/webrtc/sessions/pause and
+# /v3/webrtc/sessions/resume work regardless.
+webrtcAllowPausePatch: true
+# Close reading sessions that stay paused longer than this. 0s disables it.
+webrtcPausedTimeout: 2m
 
 ###############################################
 # Global settings -> SRT server
