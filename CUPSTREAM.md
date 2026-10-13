@@ -17,3 +17,22 @@ git cherry-pick <commits from the previous cupstream branch>
 go generate ./... && go test -race ./internal/servers/webrtc/... ./internal/protocols/webrtc/...
 git tag vX.Y.Z-cupstream.1 && git push origin cupstream/vX.Y.Z vX.Y.Z-cupstream.1
 ```
+
+## What the CupStream build adds
+
+Numbers refer to section 3.2 of the CupStream project overview.
+
+| Change | Commit |
+|---|---|
+| WHEP pause and resume (upstream PR #6308, unchanged) | `webrtc: allow pausing and resuming WHEP sessions` |
+| 10. No reordering of inbound audio (upstream PR #6329, unchanged) | `Avoid reordering inbound WebRTC audio` |
+| 11. `udpWriteBufferSize` (upstream PR #6331; conflicts resolved for v1.21.2) | `Add WebRTC UDP write buffer setting` |
+| 15. Hooks are killed 10 s after SIGINT | `externalcmd: kill commands that ignore SIGINT` |
+| 12. H264 Main and High from publishers | `webrtc: accept H264 Main and High from publishers` |
+| 1–9. Key frames for new, resumed and lagging readers; PLI/FIR forwarding; `webrtcKeyFrameRequestPeriod`; pause/resume API with per-track selection; `webrtcAllowPausePatch`; non-blocking pause; `webrtcPausedTimeout`; paused state in the API; `preview=false`; lock-free per-unit check; key frame retry | `webrtc: complete WHEP pausing and key frame handling` |
+| 13. `GET /v3/events` (server-sent events) | `api: add an event stream` |
+| 14. Readers' loss, jitter, RTT, NACKs and PLIs in the API and metrics | `webrtc: report readers' packet loss, jitter and round-trip time` |
+
+New settings, with their defaults: `udpWriteBufferSize: 0` (OS default), `webrtcKeyFrameRequestPeriod: 2s`, `webrtcAllowPausePatch: true`, `webrtcPausedTimeout: 2m`.
+
+New API: `POST /v3/webrtc/sessions/pause/{id}`, `POST /v3/webrtc/sessions/resume/{id}` (optional body `{"video": bool, "audio": bool}`), `GET /v3/events`. Sessions gain `paused`, `pausedSince`, `videoPaused`, `audioPaused`, `outboundRTPPacketsLost`, `outboundRTPPacketsLossRatio`, `outboundRTPPacketsJitter` (s), `outboundRoundTripTime` (s), `outboundNACKs` and `outboundPLIs`.
