@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"github.com/kballard/go-shellquote"
 )
@@ -54,7 +55,13 @@ func (c *Cmd) runOSSpecific(cmdstr string, env []string) error {
 	case <-c.terminate:
 		// the minus is needed to kill all subprocesses
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) //nolint:errcheck
-		<-cmdDone
+
+		select {
+		case <-cmdDone:
+		case <-time.After(terminateTimeout):
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) //nolint:errcheck
+			<-cmdDone
+		}
 		return errTerminated
 
 	case c := <-cmdDone:

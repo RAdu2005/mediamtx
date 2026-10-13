@@ -12,6 +12,11 @@ const (
 	restartPause = 5 * time.Second
 )
 
+// terminateTimeout is how long a command may take to exit after SIGINT
+// before it is killed. Without it, a command that ignores SIGINT (for
+// instance a hung FFmpeg) would block its path forever.
+var terminateTimeout = 10 * time.Second
+
 var errTerminated = errors.New("terminated")
 
 // OnExitFunc is the prototype of onExit.

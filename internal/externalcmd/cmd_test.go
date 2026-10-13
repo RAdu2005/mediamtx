@@ -3,6 +3,7 @@ package externalcmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -81,5 +82,48 @@ func TestCmdExitCode(t *testing.T) {
 				t.Fatal("timeout")
 			}
 		})
+	}
+}
+
+func TestCmdKillAfterTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows kills the whole job object at once")
+	}
+
+	prev := terminateTimeout
+	terminateTimeout = 500 * time.Millisecond
+	defer func() { terminateTimeout = prev }()
+
+	p := &Pool{}
+	p.Initialize()
+
+	started := filepath.Join(t.TempDir(), "started")
+
+	// a command that ignores SIGINT, like a hung FFmpeg.
+	cmd := &Cmd{
+		Pool:   p,
+		Cmdstr: "sh -c 'trap \"\" INT; touch " + started + "; while true; do sleep 1; done'",
+	}
+	cmd.Start()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(started)
+		return err == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	start := time.Now()
+	cmd.Close()
+
+	poolClosed := make(chan struct{})
+	go func() {
+		p.Close()
+		close(poolClosed)
+	}()
+
+	select {
+	case <-poolClosed:
+		require.Less(t, time.Since(start), 5*time.Second)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the command was not killed")
 	}
 }
