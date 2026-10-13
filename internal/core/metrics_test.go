@@ -260,6 +260,12 @@ webrtc_sessions_outbound_bytes 0
 webrtc_sessions_outbound_rtp_packets 0
 webrtc_sessions_outbound_rtcp_packets 0
 webrtc_sessions_outbound_frames_discarded 0
+webrtc_sessions_outbound_rtp_packets_lost 0
+webrtc_sessions_outbound_rtp_packets_loss_ratio 0
+webrtc_sessions_outbound_rtp_packets_jitter 0
+webrtc_sessions_outbound_round_trip_time 0
+webrtc_sessions_outbound_nacks 0
+webrtc_sessions_outbound_plis 0
 
 # WebRTC sessions (deprecated)
 webrtc_sessions_bytes_received 0
