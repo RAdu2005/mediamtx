@@ -33,6 +33,9 @@ func TestPeerConnectionReadRegistersRTXForVideoCodecs(t *testing.T) {
 		{"vp8", webrtc.MimeTypeVP8, "", 102, 125},
 		{"h265", webrtc.MimeTypeH265, "level-id=93;profile-id=2;tier-flag=0;tx-mode=SRST", 103, 126},
 		{"h264", webrtc.MimeTypeH264, "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f", 106, 36},
+		{"h264 main", webrtc.MimeTypeH264, "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f", 37, 40},
+		{"h264 constrained high", webrtc.MimeTypeH264, "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f", 38, 41},
+		{"h264 high", webrtc.MimeTypeH264, "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f", 39, 42},
 	} {
 		t.Run(ca.name, func(t *testing.T) {
 			// The publisher side needs to offer RTX itself for there to be anything
@@ -136,4 +139,54 @@ func TestPeerConnectionReadRegistersRTXForVideoCodecs(t *testing.T) {
 func TestInboundTrackReorderBufferSize(t *testing.T) {
 	require.Equal(t, 1, inboundTrackReorderBufferSize(webrtc.RTPCodecTypeAudio))
 	require.Equal(t, 0, inboundTrackReorderBufferSize(webrtc.RTPCodecTypeVideo))
+}
+
+// Browsers offer several H264 profiles at once. pion keeps only exact
+// matches when there are any, so a profile missing from incomingVideoCodecs
+// is dropped from the answer and the browser falls back to another one.
+func TestPeerConnectionReadAcceptsH264MainAndHigh(t *testing.T) {
+	profiles := map[string]uint8{"42e01f": 106, "4d001f": 37, "640c1f": 38, "64001f": 39}
+
+	var pubMediaEngine webrtc.MediaEngine
+	for profile, pt := range profiles {
+		err := pubMediaEngine.RegisterCodec(webrtc.RTPCodecParameters{
+			RTPCodecCapability: webrtc.RTPCodecCapability{
+				MimeType:    webrtc.MimeTypeH264,
+				ClockRate:   90000,
+				SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=" + profile,
+			},
+			PayloadType: webrtc.PayloadType(pt),
+		}, webrtc.RTPCodecTypeVideo)
+		require.NoError(t, err)
+	}
+
+	pub, err := webrtc.NewAPI(webrtc.WithMediaEngine(&pubMediaEngine)).NewPeerConnection(webrtc.Configuration{})
+	require.NoError(t, err)
+	defer pub.Close() //nolint:errcheck
+
+	_, err = pub.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo,
+		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
+	require.NoError(t, err)
+
+	reader := &PeerConnection{
+		LocalRandomUDP:    true,
+		IPsFromInterfaces: true,
+		Publish:           false,
+		Log:               test.NilLogger,
+	}
+	err = reader.Start()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	offer, err := pub.CreateOffer(nil)
+	require.NoError(t, err)
+	err = pub.SetLocalDescription(offer)
+	require.NoError(t, err)
+
+	answer, err := reader.CreateFullAnswer(&offer, false)
+	require.NoError(t, err)
+
+	for profile := range profiles {
+		require.Contains(t, answer.SDP, "profile-level-id="+profile, "answer:\n%s", answer.SDP)
+	}
 }

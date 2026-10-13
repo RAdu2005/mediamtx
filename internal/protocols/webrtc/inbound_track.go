@@ -84,6 +84,27 @@ var incomingVideoCodecs = []webrtc.RTPCodecParameters{
 		SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
 		PayloadType: 106,
 	},
+	// Main, Constrained High and High, so that browsers and other encoders
+	// that support them are not forced down to Constrained Baseline, which
+	// costs quality per bit. B-frames are still refused when reading.
+	{
+		MimeType:    webrtc.MimeTypeH264,
+		ClockRate:   90000,
+		SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f",
+		PayloadType: 37,
+	},
+	{
+		MimeType:    webrtc.MimeTypeH264,
+		ClockRate:   90000,
+		SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f",
+		PayloadType: 38,
+	},
+	{
+		MimeType:    webrtc.MimeTypeH264,
+		ClockRate:   90000,
+		SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
+		PayloadType: 39,
+	},
 	// RTX (RFC 4588) companions for every video codec above. ConfigureNack()
 	// only enables NACK handling; pion also needs an RTX codec registered for
 	// each video codec before it can negotiate retransmissions. Payload types
@@ -154,6 +175,24 @@ var incomingVideoCodecs = []webrtc.RTPCodecParameters{
 		ClockRate:   90000,
 		SDPFmtpLine: "apt=106",
 		PayloadType: 36,
+	},
+	{
+		MimeType:    webrtc.MimeTypeRTX,
+		ClockRate:   90000,
+		SDPFmtpLine: "apt=37",
+		PayloadType: 40,
+	},
+	{
+		MimeType:    webrtc.MimeTypeRTX,
+		ClockRate:   90000,
+		SDPFmtpLine: "apt=38",
+		PayloadType: 41,
+	},
+	{
+		MimeType:    webrtc.MimeTypeRTX,
+		ClockRate:   90000,
+		SDPFmtpLine: "apt=39",
+		PayloadType: 42,
 	},
 }
 
