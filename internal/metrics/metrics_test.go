@@ -913,6 +913,18 @@ func TestMetrics(t *testing.T) {
 			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 456\n"+
 			"webrtc_sessions_outbound_frames_discarded{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
 			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 12\n"+
+			"webrtc_sessions_outbound_rtp_packets_lost{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+			"webrtc_sessions_outbound_rtp_packets_loss_ratio{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+			"webrtc_sessions_outbound_rtp_packets_jitter{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+			"webrtc_sessions_outbound_round_trip_time{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+			"webrtc_sessions_outbound_nacks{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+			"webrtc_sessions_outbound_plis{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+			"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
 			"\n"+
 			"# WebRTC sessions (deprecated)\n"+
 			"webrtc_sessions_bytes_received{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
@@ -1109,6 +1121,12 @@ func TestZeroMetricsFallback(t *testing.T) {
 			"webrtc_sessions_outbound_rtp_packets 0\n"+
 			"webrtc_sessions_outbound_rtcp_packets 0\n"+
 			"webrtc_sessions_outbound_frames_discarded 0\n"+
+			"webrtc_sessions_outbound_rtp_packets_lost 0\n"+
+			"webrtc_sessions_outbound_rtp_packets_loss_ratio 0\n"+
+			"webrtc_sessions_outbound_rtp_packets_jitter 0\n"+
+			"webrtc_sessions_outbound_round_trip_time 0\n"+
+			"webrtc_sessions_outbound_nacks 0\n"+
+			"webrtc_sessions_outbound_plis 0\n"+
 			"\n"+
 			"# WebRTC sessions (deprecated)\n"+
 			"webrtc_sessions_bytes_received 0\n"+
@@ -1596,6 +1614,18 @@ func TestFilter(t *testing.T) {
 						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 456`+"\n"+
 						`webrtc_sessions_outbound_frames_discarded{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
 						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 12`+"\n"+
+						`webrtc_sessions_outbound_rtp_packets_lost{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
+						`webrtc_sessions_outbound_rtp_packets_loss_ratio{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
+						`webrtc_sessions_outbound_rtp_packets_jitter{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
+						`webrtc_sessions_outbound_round_trip_time{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
+						`webrtc_sessions_outbound_nacks{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
+						`webrtc_sessions_outbound_plis{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
+						`path="mypath",remoteAddr="127.0.0.1:3455",state="read"} 0`+"\n"+
 						"\n"+
 						"# WebRTC sessions (deprecated)\n"+
 						`webrtc_sessions_bytes_received{id="f47ac10b-58cc-4372-a567-0e02b2c3d479",`+
@@ -1763,6 +1793,18 @@ func TestFilterByType(t *testing.T) {
 						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 456\n"+
 						"webrtc_sessions_outbound_frames_discarded{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
 						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 12\n"+
+						"webrtc_sessions_outbound_rtp_packets_lost{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+						"webrtc_sessions_outbound_rtp_packets_loss_ratio{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+						"webrtc_sessions_outbound_rtp_packets_jitter{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+						"webrtc_sessions_outbound_round_trip_time{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+						"webrtc_sessions_outbound_nacks{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
+						"webrtc_sessions_outbound_plis{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+
+						"remoteAddr=\"127.0.0.1:3455\",state=\"read\"} 0\n"+
 						"\n"+
 						"# WebRTC sessions (deprecated)\n"+
 						"webrtc_sessions_bytes_received{id=\"f47ac10b-58cc-4372-a567-0e02b2c3d479\",path=\"mypath\","+

@@ -1037,6 +1037,12 @@ func (m *Metrics) onMetrics(ctx *gin.Context) {
 					metric(&out, "webrtc_sessions_outbound_rtp_packets", ta, int64(i.OutboundRTPPackets))
 					metric(&out, "webrtc_sessions_outbound_rtcp_packets", ta, int64(i.OutboundRTCPPackets))
 					metric(&out, "webrtc_sessions_outbound_frames_discarded", ta, int64(i.OutboundFramesDiscarded))
+					metric(&out, "webrtc_sessions_outbound_rtp_packets_lost", ta, int64(i.OutboundRTPPacketsLost))
+					metricFloat(&out, "webrtc_sessions_outbound_rtp_packets_loss_ratio", ta, i.OutboundRTPPacketsLossRatio)
+					metricFloat(&out, "webrtc_sessions_outbound_rtp_packets_jitter", ta, i.OutboundRTPPacketsJitter)
+					metricFloat(&out, "webrtc_sessions_outbound_round_trip_time", ta, i.OutboundRoundTripTime)
+					metric(&out, "webrtc_sessions_outbound_nacks", ta, int64(i.OutboundNACKs))
+					metric(&out, "webrtc_sessions_outbound_plis", ta, int64(i.OutboundPLIs))
 				}
 			}
 			out.WriteString("\n")
@@ -1075,6 +1081,12 @@ func (m *Metrics) onMetrics(ctx *gin.Context) {
 			metric(&out, "webrtc_sessions_outbound_rtp_packets", "", 0)
 			metric(&out, "webrtc_sessions_outbound_rtcp_packets", "", 0)
 			metric(&out, "webrtc_sessions_outbound_frames_discarded", "", 0)
+			metric(&out, "webrtc_sessions_outbound_rtp_packets_lost", "", 0)
+			metricFloat(&out, "webrtc_sessions_outbound_rtp_packets_loss_ratio", "", 0)
+			metricFloat(&out, "webrtc_sessions_outbound_rtp_packets_jitter", "", 0)
+			metricFloat(&out, "webrtc_sessions_outbound_round_trip_time", "", 0)
+			metric(&out, "webrtc_sessions_outbound_nacks", "", 0)
+			metric(&out, "webrtc_sessions_outbound_plis", "", 0)
 			out.WriteString("\n")
 
 			out.WriteString("# WebRTC sessions (deprecated)\n")

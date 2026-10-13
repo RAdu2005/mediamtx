@@ -1139,9 +1139,23 @@ func (co *PeerConnection) Stats() *Stats {
 		}
 	}
 
+	var outbound OutboundFeedback
+	var lossRatio, jitter float64
+	var rtt time.Duration
+
 	for _, tr := range co.OutboundTracks {
 		if sentStats := tr.rtcpSender.Stats(); sentStats != nil {
 			packetsSent += sentStats.Sent
+		}
+
+		f := tr.Feedback()
+		outbound.PacketsLost += f.PacketsLost
+		outbound.NACKs += f.NACKs
+		outbound.PLIs += f.PLIs
+		lossRatio = max(lossRatio, f.LossRatio)
+		jitter = max(jitter, f.Jitter)
+		if f.RoundTripTime != 0 && (rtt == 0 || tr.isVideo()) {
+			rtt = f.RoundTripTime
 		}
 	}
 
@@ -1160,6 +1174,13 @@ func (co *PeerConnection) Stats() *Stats {
 		RTPPacketsLost:      packetsLost,
 		RTPPacketsJitter:    rtpPacketsJitter,
 		RTCPPacketsReceived: co.statsInterceptor.rtcpPacketsReceived.Load(),
-		RTCPPacketsSent:     co.statsInterceptor.rtcpPacketsSent.Load(),
+
+		OutboundRTPPacketsLost:      outbound.PacketsLost,
+		OutboundRTPPacketsLossRatio: lossRatio,
+		OutboundRTPPacketsJitter:    jitter,
+		OutboundRoundTripTime:       rtt.Seconds(),
+		OutboundNACKs:               outbound.NACKs,
+		OutboundPLIs:                outbound.PLIs,
+		RTCPPacketsSent:             co.statsInterceptor.rtcpPacketsSent.Load(),
 	}
 }

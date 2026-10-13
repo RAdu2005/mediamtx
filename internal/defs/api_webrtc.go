@@ -46,10 +46,17 @@ type APIWebRTCSession struct {
 	OutboundRTPPackets        uint64                `json:"outboundRTPPackets"`
 	OutboundRTCPPackets       uint64                `json:"outboundRTCPPackets"`
 	OutboundFramesDiscarded   uint64                `json:"outboundFramesDiscarded"`
-	Paused                    bool                  `json:"paused"`
-	PausedSince               *time.Time            `json:"pausedSince"`
-	VideoPaused               bool                  `json:"videoPaused"`
-	AudioPaused               bool                  `json:"audioPaused"`
+	// reported by the remote reader.
+	OutboundRTPPacketsLost      uint64     `json:"outboundRTPPacketsLost"`
+	OutboundRTPPacketsLossRatio float64    `json:"outboundRTPPacketsLossRatio"`
+	OutboundRTPPacketsJitter    float64    `json:"outboundRTPPacketsJitter"`
+	OutboundRoundTripTime       float64    `json:"outboundRoundTripTime"`
+	OutboundNACKs               uint64     `json:"outboundNACKs"`
+	OutboundPLIs                uint64     `json:"outboundPLIs"`
+	Paused                      bool       `json:"paused"`
+	PausedSince                 *time.Time `json:"pausedSince"`
+	VideoPaused                 bool       `json:"videoPaused"`
+	AudioPaused                 bool       `json:"audioPaused"`
 
 	// deprecated
 	BytesReceived       uint64  `json:"bytesReceived" deprecated:"true"`

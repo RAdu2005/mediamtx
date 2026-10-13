@@ -345,3 +345,22 @@ func TestPauseToggleRace(t *testing.T) {
 	h.write(true)
 	require.NotEmpty(t, h.drain(300*time.Millisecond))
 }
+
+// The reader's receiver reports and feedback reach the outbound statistics.
+func TestOutboundStatsFromReader(t *testing.T) {
+	h := newPauseHarness(t, test.FormatH264, false)
+
+	// the reader (a MediaMTX peer connection) sends receiver reports every
+	// second and a key frame request every 2 seconds.
+	deadline := time.Now().Add(3500 * time.Millisecond)
+	for i := 0; time.Now().Before(deadline); i++ {
+		h.write(i%30 == 0)
+		time.Sleep(33 * time.Millisecond)
+	}
+
+	stats := h.publisher.Stats()
+	require.Positive(t, stats.OutboundRoundTripTime)
+	require.Less(t, stats.OutboundRoundTripTime, 1.0)
+	require.Equal(t, uint64(0), stats.OutboundRTPPacketsLost)
+	require.Positive(t, stats.OutboundPLIs)
+}

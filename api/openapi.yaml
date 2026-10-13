@@ -2753,12 +2753,31 @@ components:
         outboundFramesDiscarded:
           type: integer
           format: uint64
+        outboundNACKs:
+          type: integer
+          format: uint64
+        outboundPLIs:
+          type: integer
+          format: uint64
         outboundRTCPPackets:
           type: integer
           format: uint64
         outboundRTPPackets:
           type: integer
           format: uint64
+        outboundRTPPacketsJitter:
+          type: number
+          format: double
+        outboundRTPPacketsLossRatio:
+          type: number
+          format: double
+        outboundRTPPacketsLost:
+          type: integer
+          format: uint64
+          description: reported by the remote reader.
+        outboundRoundTripTime:
+          type: number
+          format: double
         path:
           type: string
         paused:

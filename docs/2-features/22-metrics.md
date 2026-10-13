@@ -149,6 +149,12 @@ webrtc_sessions_outbound_bytes{id="[id]",path="[path]",state="[state]"} 187
 webrtc_sessions_outbound_rtp_packets{id="[id]",path="[path]",state="[state]"} 123
 webrtc_sessions_outbound_rtcp_packets{id="[id]",path="[path]",state="[state]"} 123
 webrtc_sessions_outbound_frames_discarded{id="[id]",path="[path]",state="[state]"} 12
+webrtc_sessions_outbound_rtp_packets_lost{id="[id]",path="[path]",state="[state]"} 123
+webrtc_sessions_outbound_rtp_packets_loss_ratio{id="[id]",path="[path]",state="[state]"} 0.012
+webrtc_sessions_outbound_rtp_packets_jitter{id="[id]",path="[path]",state="[state]"} 0.004
+webrtc_sessions_outbound_round_trip_time{id="[id]",path="[path]",state="[state]"} 0.035
+webrtc_sessions_outbound_nacks{id="[id]",path="[path]",state="[state]"} 12
+webrtc_sessions_outbound_plis{id="[id]",path="[path]",state="[state]"} 3
 
 # MoQ sessions
 moq_sessions{id="[id]",path="[path]",state="[state]"} 1

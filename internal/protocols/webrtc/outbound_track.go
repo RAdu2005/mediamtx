@@ -48,6 +48,14 @@ type OutboundTrack struct {
 	mutex             sync.Mutex
 	keyFrameRequested time.Time
 
+	// feedback from the reader.
+	feedbackMutex sync.Mutex
+	srSent        [8]senderReportRecord
+	srNext        int
+	feedback      OutboundFeedback
+	nacks         atomic.Uint64
+	plis          atomic.Uint64
+
 	// owned by the goroutine that writes units.
 	skipped   bool
 	seqOffset uint16
@@ -95,6 +103,9 @@ func (t *OutboundTrack) setup(p *PeerConnection) error {
 		Period:    1 * time.Second,
 		TimeNow:   time.Now,
 		WritePacketRTCP: func(pkt rtcp.Packet) {
+			if sr, ok := pkt.(*rtcp.SenderReport); ok {
+				t.recordSenderReport(sr, time.Now())
+			}
 			p.wr.WriteRTCP([]rtcp.Packet{pkt}) //nolint:errcheck
 		},
 	}
@@ -114,14 +125,7 @@ func (t *OutboundTrack) setup(p *PeerConnection) error {
 				panic(err2)
 			}
 
-			for _, pkt := range pkts {
-				switch pkt.(type) {
-				case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
-					// the reader lost a reference frame: pass the request on to
-					// the source instead of dropping it.
-					t.requestKeyFrame(false)
-				}
-			}
+			t.processRTCP(pkts, time.Now())
 		}
 	}()
 
@@ -290,4 +294,102 @@ func (t *OutboundTrack) WriteRTPWithNTP(pkt *rtp.Packet, ntp time.Time) error {
 	t.rtcpSender.ProcessPacket(pkt, ntp, true)
 
 	return t.track.WriteRTP(pkt)
+}
+
+// OutboundFeedback is what the reader reports about a track, from its RTCP
+// receiver reports and feedback messages.
+type OutboundFeedback struct {
+	// PacketsLost is the cumulative number of packets the reader lost.
+	PacketsLost uint64
+	// LossRatio is the fraction of packets lost in the last report (0 to 1).
+	LossRatio float64
+	// Jitter is the interarrival jitter, in seconds.
+	Jitter float64
+	// RoundTripTime is zero until a report refers to one of our sender reports.
+	RoundTripTime time.Duration
+	// NACKs is the number of packets the reader asked to be retransmitted.
+	NACKs uint64
+	// PLIs is the number of key frame requests (PLI and FIR) from the reader.
+	PLIs uint64
+}
+
+type senderReportRecord struct {
+	ntpMiddle uint32 // middle 32 bits of the NTP timestamp, as echoed in LSR
+	sent      time.Time
+}
+
+// recordSenderReport remembers when a sender report was sent. Its NTP time
+// follows the stream rather than the wall clock, so the round-trip time is
+// computed from these send times.
+func (t *OutboundTrack) recordSenderReport(sr *rtcp.SenderReport, now time.Time) {
+	t.feedbackMutex.Lock()
+	defer t.feedbackMutex.Unlock()
+
+	t.srSent[t.srNext] = senderReportRecord{ntpMiddle: uint32(sr.NTPTime >> 16), sent: now}
+	t.srNext = (t.srNext + 1) % len(t.srSent)
+}
+
+func (t *OutboundTrack) processRTCP(pkts []rtcp.Packet, now time.Time) {
+	for _, pkt := range pkts {
+		switch pkt := pkt.(type) {
+		case *rtcp.ReceiverReport:
+			for i := range pkt.Reports {
+				if pkt.Reports[i].SSRC == t.ssrc {
+					t.processReceptionReport(&pkt.Reports[i], now)
+				}
+			}
+
+		case *rtcp.TransportLayerNack:
+			n := 0
+			for _, pair := range pkt.Nacks {
+				n += len(pair.PacketList())
+			}
+			t.nacks.Add(uint64(n))
+
+		case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
+			t.plis.Add(1)
+			// the reader lost a reference frame: pass the request on to the
+			// source instead of dropping it.
+			t.requestKeyFrame(false)
+		}
+	}
+}
+
+func (t *OutboundTrack) processReceptionReport(rep *rtcp.ReceptionReport, now time.Time) {
+	if t.rtcpSender != nil {
+		t.rtcpSender.ProcessReceptionReport(rep)
+	}
+
+	t.feedbackMutex.Lock()
+	defer t.feedbackMutex.Unlock()
+
+	t.feedback.PacketsLost = uint64(rep.TotalLost)
+	t.feedback.LossRatio = float64(rep.FractionLost) / 256
+	if t.Caps.ClockRate != 0 {
+		t.feedback.Jitter = float64(rep.Jitter) / float64(t.Caps.ClockRate)
+	}
+
+	if rep.LastSenderReport != 0 {
+		for _, r := range t.srSent {
+			if r.ntpMiddle == rep.LastSenderReport && !r.sent.IsZero() {
+				// DLSR is in units of 1/65536 seconds.
+				delay := time.Duration(uint64(rep.Delay) * uint64(time.Second) / 65536)
+				if rtt := now.Sub(r.sent) - delay; rtt >= 0 {
+					t.feedback.RoundTripTime = rtt
+				}
+				break
+			}
+		}
+	}
+}
+
+// Feedback returns what the reader reported about the track.
+func (t *OutboundTrack) Feedback() OutboundFeedback {
+	t.feedbackMutex.Lock()
+	f := t.feedback
+	t.feedbackMutex.Unlock()
+
+	f.NACKs = t.nacks.Load()
+	f.PLIs = t.plis.Load()
+	return f
 }
