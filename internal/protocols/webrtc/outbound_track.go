@@ -12,8 +12,15 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-// keyFrameRetryPeriod is how long a track waits for a requested key frame
-// before asking again.
+// keyFrameQuickRetryPeriod is how long a track waits for a requested key
+// frame before asking a second time. Browsers ignore a request that arrives
+// within 300 ms of their previous key frame (libwebrtc's minimum interval
+// between key frames), which happens when the request follows the periodic
+// one closely; the second request is then answered.
+const keyFrameQuickRetryPeriod = 500 * time.Millisecond
+
+// keyFrameRetryPeriod is how long a track waits between later requests;
+// these are logged, because the source may ignore requests altogether.
 const keyFrameRetryPeriod = 2 * time.Second
 
 // Bits of OutboundTrack.flags. When none is set, units take a lock-free path.
@@ -28,10 +35,11 @@ type OutboundTrack struct {
 	Caps webrtc.RTPCodecCapability
 
 	// RequestKeyFrame, when set, asks the source of the stream for a key frame.
-	// retry is true when an earlier request was not answered in time.
 	// It is called when the track starts waiting for a key frame (a new
 	// reader, a resume, frames discarded for a slow reader), when the reader
-	// sends a PLI or FIR, and again every 2 seconds while still waiting.
+	// sends a PLI or FIR, and while still waiting, again after 500 ms and then
+	// every 2 seconds. retry is true from the third request on, when the
+	// source is probably ignoring requests.
 	RequestKeyFrame func(retry bool)
 
 	// placeholder marks the silent audio track that is added to streams
@@ -47,6 +55,7 @@ type OutboundTrack struct {
 	flags             atomic.Uint32
 	mutex             sync.Mutex
 	keyFrameRequested time.Time
+	keyFrameRequests  int // requests sent while waiting for the current key frame
 
 	// feedback from the reader.
 	feedbackMutex sync.Mutex
@@ -186,6 +195,7 @@ func (t *OutboundTrack) setPaused(paused bool) {
 		if t.isVideo() {
 			f |= flagWaitKeyFrame
 			t.keyFrameRequested = time.Now()
+			t.keyFrameRequests = 1
 			needKeyFrame = true
 		}
 	}
@@ -217,6 +227,7 @@ func (t *OutboundTrack) requireKeyFrame() {
 	}
 	t.flags.Store(f | flagWaitKeyFrame)
 	t.keyFrameRequested = time.Now()
+	t.keyFrameRequests = 1
 	t.mutex.Unlock()
 
 	t.requestKeyFrame(false)
@@ -253,19 +264,27 @@ func (t *OutboundTrack) skipUnitSlow(keyFrame bool, now time.Time) (skip bool, r
 	if f&flagWaitKeyFrame != 0 {
 		if !keyFrame {
 			// a new reader starts waiting without a request: send it now.
-			// After that, repeat it if the key frame does not come.
+			// After that, repeat it if the key frame does not come: once
+			// quickly, then every 2 seconds.
+			period := keyFrameRetryPeriod
+			if t.keyFrameRequests == 1 {
+				period = keyFrameQuickRetryPeriod
+			}
 			switch {
 			case t.keyFrameRequested.IsZero():
 				t.keyFrameRequested = now
+				t.keyFrameRequests = 1
 				return true, true, false
-			case now.Sub(t.keyFrameRequested) >= keyFrameRetryPeriod:
+			case now.Sub(t.keyFrameRequested) >= period:
 				t.keyFrameRequested = now
-				return true, true, true
+				t.keyFrameRequests++
+				return true, true, t.keyFrameRequests > 2
 			}
 			return true, false, false
 		}
 		f &^= flagWaitKeyFrame
 		t.keyFrameRequested = time.Time{}
+		t.keyFrameRequests = 0
 	}
 
 	if f&flagPauseAfterNext != 0 {

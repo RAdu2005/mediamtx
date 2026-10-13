@@ -248,13 +248,16 @@ func TestKeyFrameRetry(t *testing.T) {
 	require.Equal(t, int64(1), h.keyFrames.Load())
 
 	// the source keeps sending frames that are not key frames.
-	deadline := time.Now().Add(2500 * time.Millisecond)
+	deadline := time.Now().Add(2700 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		h.write(false)
 		time.Sleep(50 * time.Millisecond)
 	}
 	require.Empty(t, h.drain(100*time.Millisecond))
-	require.Equal(t, int64(1), h.retries.Load(), "the request is repeated after 2 seconds")
+	// asked again after 500 ms, which is not reported as a retry, then after
+	// 2 more seconds (the reader's own periodic PLIs are forwarded too).
+	require.GreaterOrEqual(t, h.keyFrames.Load(), int64(3))
+	require.Equal(t, int64(1), h.retries.Load(), "the third request is reported as a retry")
 }
 
 func TestRequireKeyFrameAfterDiscard(t *testing.T) {

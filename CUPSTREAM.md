@@ -33,6 +33,7 @@ Numbers refer to section 3.2 of the CupStream project overview.
 | 13. `GET /v3/events` (server-sent events) | `api: add an event stream` |
 | 14. Readers' loss, jitter, RTT, NACKs and PLIs in the API and metrics | `webrtc: report readers' packet loss, jitter and round-trip time` |
 | Measured key frame interval of each path; the key frame retry warning is logged once per session | `stream: measure the key frame interval` |
+| A second key frame request after 500 ms, since browsers ignore one within 300 ms of their previous key frame | `webrtc: ask again for a key frame after 500 ms` |
 
 New settings, with their defaults: `udpWriteBufferSize: 0` (OS default), `webrtcKeyFrameRequestPeriod: 2s`, `webrtcAllowPausePatch: true`, `webrtcPausedTimeout: 2m`.
 
