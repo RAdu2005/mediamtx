@@ -5,6 +5,7 @@ import (
 
 	"github.com/bluenviron/mediamtx/internal/conf"
 	"github.com/bluenviron/mediamtx/internal/defs"
+	"github.com/bluenviron/mediamtx/internal/events"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/logger"
 )
@@ -21,6 +22,14 @@ type OnOnlineParams struct {
 
 // OnOnline is the OnOnline hook.
 func OnOnline(params OnOnlineParams) func() {
+	event := events.Event{
+		Type:   events.TypeStreamOnline,
+		Path:   params.ExternalCmdEnv["MTX_PATH"],
+		Query:  params.Query,
+		Source: params.Desc,
+	}
+	events.Publish(event)
+
 	var env externalcmd.Environment
 	var onOnlineCmd *externalcmd.Cmd
 
@@ -48,6 +57,9 @@ func OnOnline(params OnOnlineParams) func() {
 	}
 
 	return func() {
+		event.Type = events.TypeStreamOffline
+		events.Publish(event)
+
 		if onOnlineCmd != nil {
 			onlineCmd := onOnlineCmd
 			onOnlineCmd = nil

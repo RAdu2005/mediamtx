@@ -107,6 +107,7 @@ func (a *API) Initialize() error {
 	group := router.Group("/v3")
 
 	group.GET("/info", a.onInfo)
+	group.GET("/events", a.onEvents)
 
 	group.POST("/auth/jwks/refresh", a.onAuthJwksRefresh)
 

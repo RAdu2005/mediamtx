@@ -5,6 +5,7 @@ import (
 
 	"github.com/bluenviron/mediamtx/internal/conf"
 	"github.com/bluenviron/mediamtx/internal/defs"
+	"github.com/bluenviron/mediamtx/internal/events"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/logger"
 )
@@ -23,6 +24,14 @@ type OnAvailableParams struct {
 func OnAvailable(params OnAvailableParams) func() {
 	var env externalcmd.Environment
 	var onAvailableCmd *externalcmd.Cmd
+
+	event := events.Event{
+		Path:   params.ExternalCmdEnv["MTX_PATH"],
+		Query:  params.Query,
+		Source: params.Desc,
+	}
+	event.Type = events.TypeStreamAvailable
+	events.Publish(event)
 
 	if params.Conf.RunOnAvailable != "" || params.Conf.RunOnUnavailable != "" {
 		env = params.ExternalCmdEnv
@@ -48,6 +57,9 @@ func OnAvailable(params OnAvailableParams) func() {
 	}
 
 	return func() {
+		event.Type = events.TypeStreamUnavailable
+		events.Publish(event)
+
 		if onAvailableCmd != nil {
 			onAvailableCmd.Close()
 			params.Logger.Log(logger.Info, "runOnAvailable command stopped")

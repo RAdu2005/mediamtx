@@ -22,6 +22,7 @@ import (
 	"github.com/bluenviron/mediamtx/internal/auth"
 	"github.com/bluenviron/mediamtx/internal/conf"
 	"github.com/bluenviron/mediamtx/internal/defs"
+	"github.com/bluenviron/mediamtx/internal/events"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/hooks"
 	"github.com/bluenviron/mediamtx/internal/logger"
@@ -297,6 +298,8 @@ func (s *session) initialize() {
 
 	s.Log(logger.Info, "created by %s", s.remoteAddr)
 
+	events.Publish(s.event(events.TypeSessionCreated))
+
 	s.wg.Add(1)
 
 	go s.run()
@@ -321,7 +324,31 @@ func (s *session) run() {
 
 	s.parent.closeSession(s)
 
+	events.Publish(s.event(events.TypeSessionClosed))
+
 	s.Log(logger.Info, "closed: %v", err)
+}
+
+// event describes the session for the event stream.
+func (s *session) event(typ events.Type) events.Event {
+	s.mutex.RLock()
+	user := s.user
+	s.mutex.RUnlock()
+
+	state := string(defs.APIWebRTCSessionStateRead)
+	if s.publish {
+		state = string(defs.APIWebRTCSessionStatePublish)
+	}
+
+	return events.Event{
+		Type:       typ,
+		Path:       s.pathName,
+		Query:      s.query,
+		Reader:     &defs.APIPathReader{Type: defs.APIPathReaderTypeWebRTCSession, ID: s.uuid.String()},
+		User:       user,
+		RemoteAddr: s.remoteAddr,
+		State:      state,
+	}
 }
 
 func (s *session) runInner() error {
@@ -622,6 +649,7 @@ func (s *session) runRead(req *initialRequestReq) (int, error) {
 		ExternalCmdEnv:  res.Path.ExternalCmdEnv(),
 		Reader:          *s.APIReaderDescribe(),
 		Query:           s.query,
+		User:            res.User,
 	})
 	defer onUnreadHook()
 

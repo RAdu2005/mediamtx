@@ -4,6 +4,7 @@ import (
 	"net"
 
 	"github.com/bluenviron/mediamtx/internal/defs"
+	"github.com/bluenviron/mediamtx/internal/events"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/logger"
 )
@@ -23,6 +24,10 @@ type OnConnectParams struct {
 func OnConnect(params OnConnectParams) func() {
 	var env externalcmd.Environment
 	var onConnectCmd *externalcmd.Cmd
+
+	desc := params.Desc
+	event := events.Event{Type: events.TypeConnOpened, Reader: &desc}
+	events.Publish(event)
 
 	if params.RunOnConnect != "" || params.RunOnDisconnect != "" {
 		_, port, _ := net.SplitHostPort(params.RTSPAddress)
@@ -49,6 +54,9 @@ func OnConnect(params OnConnectParams) func() {
 	}
 
 	return func() {
+		event.Type = events.TypeConnClosed
+		events.Publish(event)
+
 		if onConnectCmd != nil {
 			onConnectCmd.Close()
 			params.Logger.Log(logger.Info, "runOnConnect command stopped")

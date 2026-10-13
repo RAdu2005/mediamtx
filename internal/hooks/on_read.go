@@ -5,6 +5,7 @@ import (
 
 	"github.com/bluenviron/mediamtx/internal/conf"
 	"github.com/bluenviron/mediamtx/internal/defs"
+	"github.com/bluenviron/mediamtx/internal/events"
 	"github.com/bluenviron/mediamtx/internal/externalcmd"
 	"github.com/bluenviron/mediamtx/internal/logger"
 )
@@ -17,12 +18,24 @@ type OnReadParams struct {
 	ExternalCmdEnv  externalcmd.Environment
 	Reader          defs.APIPathReader
 	Query           string
+	// User is the authenticated user of the reader, if any (for events).
+	User string
 }
 
 // OnRead is the OnRead hook.
 func OnRead(params OnReadParams) func() {
 	var env externalcmd.Environment
 	var onReadCmd *externalcmd.Cmd
+
+	reader := params.Reader
+	event := events.Event{
+		Type:   events.TypeReaderJoined,
+		Path:   params.ExternalCmdEnv["MTX_PATH"],
+		Query:  params.Query,
+		Reader: &reader,
+		User:   params.User,
+	}
+	events.Publish(event)
 
 	if params.Conf.RunOnRead != "" || params.Conf.RunOnUnread != "" {
 		env = params.ExternalCmdEnv
@@ -47,6 +60,9 @@ func OnRead(params OnReadParams) func() {
 	}
 
 	return func() {
+		event.Type = events.TypeReaderLeft
+		events.Publish(event)
+
 		if onReadCmd != nil {
 			onReadCmd.Close()
 			params.Logger.Log(logger.Info, "runOnRead command stopped")

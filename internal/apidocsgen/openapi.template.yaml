@@ -83,6 +83,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /v3/events:
+    get:
+      operationId: events
+      tags: [General]
+      summary: streams server events.
+      description: >-
+        Server-sent events: the first event is "ready", then one event per
+        change (stream.available, stream.unavailable, stream.online,
+        stream.offline, reader.joined, reader.left, conn.opened, conn.closed,
+        session.created, session.closed), whose data is a JSON object with
+        type, time, path, query, source, reader, user, remoteAddr and state.
+        A client that does not keep up receives "overflow" and the stream
+        ends; it should reconnect and list the current state again.
+      responses:
+        "200":
+          description: the event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
   /v3/auth/jwks/refresh:
     post:
       operationId: authJwksRefresh
