@@ -1494,3 +1494,12 @@ func TestAuthError(t *testing.T) {
 		})
 	}
 }
+
+// A reader gets its media through a listener of several UDP sockets.
+func TestServerReadThroughUDPSockets(t *testing.T) {
+	h := newReadHarness(t, ptr(""), func(s *Server) {
+		s.LocalUDPSockets = 4
+	})
+	require.NotEmpty(t, h.drain(500*time.Millisecond))
+	require.True(t, h.session(t).PeerConnectionEstablished)
+}

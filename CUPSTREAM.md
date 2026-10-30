@@ -34,7 +34,8 @@ Numbers refer to section 3.2 of the CupStream project overview.
 | 14. Readers' loss, jitter, RTT, NACKs and PLIs in the API and metrics | `webrtc: report readers' packet loss, jitter and round-trip time` |
 | Measured key frame interval of each path; the key frame retry warning is logged once per session | `stream: measure the key frame interval` |
 | A second key frame request after 500 ms, since browsers ignore one within 300 ms of their previous key frame | `webrtc: ask again for a key frame after 500 ms` |
+| `webrtcLocalUDPSockets`: several sockets share the UDP/ICE port (`SO_REUSEPORT`, Linux), so sessions send in parallel; a reuseport program steers every incoming packet to the first socket | `webrtc: send through several UDP sockets` |
 
-New settings, with their defaults: `udpWriteBufferSize: 0` (OS default), `webrtcKeyFrameRequestPeriod: 2s`, `webrtcAllowPausePatch: true`, `webrtcPausedTimeout: 2m`.
+New settings, with their defaults: `udpWriteBufferSize: 0` (OS default), `webrtcLocalUDPSockets: 1`, `webrtcKeyFrameRequestPeriod: 2s`, `webrtcAllowPausePatch: true`, `webrtcPausedTimeout: 2m`.
 
 New API: `POST /v3/webrtc/sessions/pause/{id}`, `POST /v3/webrtc/sessions/resume/{id}` (optional body `{"video": bool, "audio": bool}`), `GET /v3/events`. Sessions gain `paused`, `pausedSince`, `videoPaused`, `audioPaused`, `outboundRTPPacketsLost`, `outboundRTPPacketsLossRatio`, `outboundRTPPacketsJitter` (s), `outboundRoundTripTime` (s), `outboundNACKs` and `outboundPLIs`. Paths gain `keyFrameInterval` (s): the longest of the last four intervals between key frames of the first video track, which is how long a new reader waits when the publisher ignores key frame requests (OBS and FFmpeg do).

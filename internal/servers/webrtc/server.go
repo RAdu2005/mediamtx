@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bluenviron/gortsplib/v5/pkg/readbuffer"
 	"github.com/google/uuid"
 	"github.com/pion/ice/v4"
 	"github.com/pion/logging"
@@ -224,6 +223,7 @@ type Server struct {
 	UDPReadBufferSize            uint
 	UDPWriteBufferSize           uint
 	LocalUDPAddress              string
+	LocalUDPSockets              int
 	LocalTCPAddress              string
 	SupportsIPv6                 bool
 	IPsFromInterfaces            bool
@@ -315,32 +315,16 @@ func (s *Server) Initialize() error {
 	}
 
 	if s.LocalUDPAddress != "" {
-		s.udpMuxLn, err = net.ListenPacket(restrictnetwork.Restrict("udp", s.LocalUDPAddress))
+		network, address := restrictnetwork.Restrict("udp", s.LocalUDPAddress)
+		var sockets *webrtc.UDPSockets
+		sockets, err = webrtc.ListenUDPSockets(network, address,
+			s.LocalUDPSockets, int(s.UDPReadBufferSize), int(s.UDPWriteBufferSize))
 		if err != nil {
 			s.httpServer.close()
 			ctxCancel()
 			return err
 		}
-
-		if s.UDPReadBufferSize != 0 {
-			err = readbuffer.SetReadBuffer(s.udpMuxLn.(*net.UDPConn), int(s.UDPReadBufferSize))
-			if err != nil {
-				s.udpMuxLn.Close()
-				s.httpServer.close()
-				ctxCancel()
-				return err
-			}
-		}
-
-		if s.UDPWriteBufferSize != 0 {
-			err = s.udpMuxLn.(*net.UDPConn).SetWriteBuffer(int(s.UDPWriteBufferSize))
-			if err != nil {
-				s.udpMuxLn.Close()
-				s.httpServer.close()
-				ctxCancel()
-				return err
-			}
-		}
+		s.udpMuxLn = sockets
 
 		s.iceUDPMux = ice.NewUDPMuxDefault(ice.UDPMuxParams{
 			UDPConn: s.udpMuxLn,

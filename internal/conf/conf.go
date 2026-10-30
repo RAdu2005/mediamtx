@@ -383,6 +383,7 @@ type Conf struct {
 	WebRTCAllowOrigins                 []string          `json:"webrtcAllowOrigins"`
 	WebRTCTrustedProxies               IPNetworks        `json:"webrtcTrustedProxies"`
 	WebRTCLocalUDPAddress              string            `json:"webrtcLocalUDPAddress"`
+	WebRTCLocalUDPSockets              int               `json:"webrtcLocalUDPSockets"`
 	WebRTCLocalTCPAddress              string            `json:"webrtcLocalTCPAddress"`
 	WebRTCIPsFromInterfaces            bool              `json:"webrtcIPsFromInterfaces"`
 	WebRTCIPsFromInterfacesList        []string          `json:"webrtcIPsFromInterfacesList"`
@@ -524,6 +525,7 @@ func (conf *Conf) setDefaults() {
 	conf.WebRTCServerCert = "server.crt"
 	conf.WebRTCAllowOrigins = []string{"*"}
 	conf.WebRTCLocalUDPAddress = ":8189"
+	conf.WebRTCLocalUDPSockets = 1
 	conf.WebRTCIPsFromInterfaces = true
 	conf.WebRTCSTUNGatherTimeout = 5 * Duration(time.Second)
 	conf.WebRTCHandshakeTimeout = 10 * Duration(time.Second)
@@ -1039,6 +1041,9 @@ func (conf *Conf) Validate(l logger.Writer) error {
 			}
 		}
 
+		if conf.WebRTCLocalUDPSockets < 1 || conf.WebRTCLocalUDPSockets > 64 {
+			return fmt.Errorf("'webrtcLocalUDPSockets' must be between 1 and 64")
+		}
 		if conf.WebRTCLocalUDPAddress == "" &&
 			conf.WebRTCLocalTCPAddress == "" &&
 			len(conf.WebRTCICEServers2) == 0 {

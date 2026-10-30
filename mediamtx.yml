@@ -402,6 +402,11 @@ webrtcTrustedProxies: []
 # Address of a UDP/ICE listener that will receive connections.
 # Use a blank string to disable.
 webrtcLocalUDPAddress: :8189
+# Number of sockets that share the UDP/ICE listener's address (Linux only;
+# elsewhere there is always one). Sessions send through them in parallel;
+# with one socket, every packet to any reader waits for the previous one,
+# which limits the output with many readers.
+webrtcLocalUDPSockets: 1
 # Address of a TCP/ICE listener that will receive connections.
 # This is disabled by default since TCP is less efficient than UDP and
 # introduces a progressive delay when network is congested.
