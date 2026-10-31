@@ -96,6 +96,16 @@ webrtcICEServers2:
     clientOnly: true
 ```
 
+## Serving many readers
+
+All WebRTC sessions that use the UDP/ICE listener share one socket, and sending on a socket is serialized: with many readers, each packet waits for the previous one, and the output of the whole server stops growing long before the CPU or the network is busy. On Linux, the listener can be made of several sockets bound to the same port, through which sessions send in parallel:
+
+```yml
+webrtcLocalUDPSockets: 8
+```
+
+Packets still leave from the same port, every incoming packet is still read from a single socket, and the packets of each session always go through the same socket, so they stay in order.
+
 ## Coturn setup
 
 Here's how to setup the [Coturn](https://github.com/coturn/coturn) TURN server and use it with _MediaMTX_. This is needed only if all other WebRTC connectivity methods have failed. Start Coturn with Docker:

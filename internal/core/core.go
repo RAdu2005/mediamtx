@@ -851,6 +851,7 @@ func (p *Core) createResources(initial bool) error {
 			UDPReadBufferSize:            currentConf.UDPReadBufferSize,
 			UDPWriteBufferSize:           currentConf.UDPWriteBufferSize,
 			LocalUDPAddress:              currentConf.WebRTCLocalUDPAddress,
+			LocalUDPSockets:              currentConf.WebRTCLocalUDPSockets,
 			LocalTCPAddress:              currentConf.WebRTCLocalTCPAddress,
 			SupportsIPv6:                 p.supportsIPv6,
 			IPsFromInterfaces:            currentConf.WebRTCIPsFromInterfaces,
@@ -1185,6 +1186,7 @@ func (p *Core) closeResources(newConf *conf.Conf) {
 		newConf.UDPReadBufferSize != currentConf.UDPReadBufferSize ||
 		newConf.UDPWriteBufferSize != currentConf.UDPWriteBufferSize ||
 		newConf.WebRTCLocalUDPAddress != currentConf.WebRTCLocalUDPAddress ||
+		newConf.WebRTCLocalUDPSockets != currentConf.WebRTCLocalUDPSockets ||
 		newConf.WebRTCLocalTCPAddress != currentConf.WebRTCLocalTCPAddress ||
 		newConf.WebRTCIPsFromInterfaces != currentConf.WebRTCIPsFromInterfaces ||
 		!reflect.DeepEqual(newConf.WebRTCIPsFromInterfacesExcludeList, currentConf.WebRTCIPsFromInterfacesExcludeList) ||

@@ -755,6 +755,9 @@ components:
           type: string
         webrtcLocalUDPAddress:
           type: string
+        webrtcLocalUDPSockets:
+          type: integer
+          format: int64
         webrtcPausedTimeout:
           type: string
         webrtcSTUNGatherTimeout:
